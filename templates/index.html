@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 测试用例生成器</title>
+<style>
+  /* ── 主题变量 ── */
+  :root, [data-theme="dark"] {
+    --bg:#1e1e1e;--panel-bg:#252525;--panel-header:#2d2d2d;--border:#3a3a3a;--border-light:#333;
+    --text:#d4d4d4;--text-dim:#999;--text-bright:#fff;--accent:#5a9e9e;--accent-dim:#3d6e6e;
+    --input-bg:#1a1a1a;--input-border:#444;--input-focus:#666;--btn-bg:#383838;--btn-hover:#444;--btn-active:#2a2a2a;
+    --table-bg:#1a1a1a;--table-alt:#1c1c1c;--table-hover:#262626;--th-bg:#2a2a2a;--th-text:#999;--td-text:#bbb;--td-border:#1f1f1f;
+    --code-bg:#111;--code-color:#aaa;--danger:#c44;--danger-bg:#3d1a1a;--danger-border:#5a2525;--danger-text:#e88;
+    --warning-bg:#3d2a10;--warning-border:#5a3a1a;--warning-text:#db8;--success-bg:#1a2a1a;--success-border:#253a25;--success-text:#8c8;
+    --info-bg:#1a2530;--info-border:#253545;--info-text:#8ac;--empty-color:#555;--empty-title:#666;--empty-sub:#444;
+    --think-bg:#111;--think-text:#777;--think-border:#2a2a2a;--status-text:#888;--status-sep:#3a3a3a;--status-b:#ccc;
+    --scrollbar-track:#1a1a1a;--scrollbar-thumb:#444;--scrollbar-thumb-hover:#555;--toast-bg:#333;--toast-text:#ddd;
+    --toolbar-bg:#2d2d2d;--toolbar-border:#111;--sidebar-border:#111;--section-border:#1a1a1a;--section-header-text:#aaa;--section-chevron:#666;
+    --gen-btn-area-bg:#252525;--gen-btn-area-border:#1a1a1a;--modal-overlay:rgba(0,0,0,.6);--modal-bg:#2a2a2a;--modal-border:#444;
+    --select-arrow:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M0 2l4 4 4-4' fill='%23999'/%3E%3C/svg%3E");
+    --stream-bg:#111;--stream-think:#333;
+  }
+  [data-theme="light"] {
+    --bg:#e8e8e8;--panel-bg:#f0f0f0;--panel-header:#e4e4e4;--border:#ccc;--border-light:#d5d5d5;
+    --text:#333;--text-dim:#777;--text-bright:#111;--accent:#3d7d7d;--accent-dim:#356868;
+    --input-bg:#fff;--input-border:#c0c0c0;--input-focus:#888;--btn-bg:#e0e0e0;--btn-hover:#d4d4d4;--btn-active:#ccc;
+    --table-bg:#fff;--table-alt:#f5f5f5;--table-hover:#e8f0f0;--th-bg:#e8e8e8;--th-text:#666;--td-text:#444;--td-border:#e0e0e0;
+    --code-bg:#eee;--code-color:#555;--danger:#c44;--danger-bg:#fce8e8;--danger-border:#e8b0b0;--danger-text:#a03030;
+    --warning-bg:#faf0e0;--warning-border:#d8c090;--warning-text:#a06020;--success-bg:#e8f4e8;--success-border:#b0d0b0;--success-text:#307030;
+    --info-bg:#e8eef6;--info-border:#b0c4d8;--info-text:#305878;--empty-color:#999;--empty-title:#888;--empty-sub:#aaa;
+    --think-bg:#f5f5f0;--think-text:#888;--think-border:#ddd;--status-text:#777;--status-sep:#d0d0d0;--status-b:#444;
+    --scrollbar-track:#e8e8e8;--scrollbar-thumb:#c0c0c0;--scrollbar-thumb-hover:#aaa;--toast-bg:#f5f5f5;--toast-text:#333;
+    --toolbar-bg:#e4e4e4;--toolbar-border:#ccc;--sidebar-border:#ccc;--section-border:#ddd;--section-header-text:#777;--section-chevron:#aaa;
+    --gen-btn-area-bg:#e8e8e8;--gen-btn-area-border:#d5d5d5;--modal-overlay:rgba(0,0,0,.35);--modal-bg:#f5f5f5;--modal-border:#ccc;
+    --stream-bg:#f5f5f5;--stream-think:#e8e8e0;
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:12px;background:var(--bg);color:var(--text);line-height:1.4;-webkit-font-smoothing:antialiased;overflow:hidden;}
+  .toolbar{height:28px;background:var(--toolbar-bg);border-bottom:1px solid var(--toolbar-border);display:flex;align-items:center;padding:0 10px;gap:12px;font-size:11.5px;user-select:none;}
+  .toolbar-title{font-weight:600;color:var(--text-dim);font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+  .toolbar-spacer{flex:1;}
+  .toolbar-info{color:var(--text-dim);font-size:10.5px;}
+  .toolbar-prompt{color:var(--accent);font-size:10.5px;font-weight:600;}
+  .theme-btn{height:20px;padding:0 8px;background:var(--btn-bg);border:1px solid var(--border);color:var(--text-dim);font-size:10.5px;cursor:pointer;font-family:inherit;}
+  .theme-btn:hover{color:var(--text);border-color:var(--input-focus);}
+  .workspace{display:flex;height:calc(100vh - 28px);}
+  .sidebar{width:340px;min-width:340px;background:var(--panel-bg);border-right:1px solid var(--sidebar-border);display:flex;flex-direction:column;overflow-y:auto;}
+  .sidebar-section{border-bottom:1px solid var(--section-border);}
+  .section-header{height:26px;background:var(--panel-header);padding:0 10px;display:flex;align-items:center;font-size:11px;font-weight:600;color:var(--section-header-text);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--section-border);cursor:pointer;user-select:none;}
+  .section-header::before{content:'▾';margin-right:6px;font-size:9px;color:var(--section-chevron);}
+  .section-header.collapsed::before{content:'▸';}
+  .section-header.no-toggle{cursor:default;}
+  .section-header.no-toggle::before{content:'';margin:0;}
+  .section-body{padding:8px 10px;}
+  .section-body.collapsed{display:none;}
+  .field{margin-bottom:6px;}
+  .field-label{display:block;font-size:10.5px;color:var(--text-dim);margin-bottom:2px;text-transform:uppercase;letter-spacing:.3px;}
+  .field-input{width:100%;height:26px;padding:0 8px;background:var(--input-bg);border:1px solid var(--input-border);color:var(--text);font-family:inherit;font-size:12px;outline:none;}
+  .field-input:focus{border-color:var(--input-focus);}
+  .prompt-select-row{display:flex;gap:4px;align-items:center;}
+  .prompt-select{flex:1;height:26px;padding:0 6px;min-width:0;background:var(--input-bg);border:1px solid var(--input-border);color:var(--text);font-family:inherit;font-size:12px;outline:none;cursor:pointer;appearance:none;-webkit-appearance:none;background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 6px center;padding-right:20px;}
+  .prompt-select:focus{border-color:var(--input-focus);}
+  .prompt-action{height:26px;width:26px;padding:0;font-size:13px;justify-content:center;}
+  .prd-editor{width:100%;flex:1;min-height:200px;padding:10px 12px;background:var(--input-bg);border:1px solid var(--border-light);color:var(--text);font-family:"Cascadia Code","JetBrains Mono","Fira Code","Consolas",monospace;font-size:12px;line-height:1.65;resize:none;outline:none;tab-size:2;}
+  .prd-editor:focus{border-color:var(--input-focus);}
+  .prd-editor::placeholder{color:var(--empty-sub);}
+  .btn{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 12px;background:var(--btn-bg);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:11.5px;cursor:pointer;outline:none;white-space:nowrap;}
+  .btn:hover{background:var(--btn-hover);color:var(--text-bright);}
+  .btn:active{background:var(--btn-active);}
+  .btn:disabled{opacity:.4;pointer-events:none;}
+  .btn-primary{background:var(--accent-dim);border-color:var(--accent);color:#fff;font-weight:600;}
+  .btn-primary:hover{background:var(--accent);}
+  .btn-danger{border-color:var(--danger);color:var(--danger);}
+  .btn-danger:hover{background:var(--danger-bg);}
+  .btn-sm{height:22px;padding:0 8px;font-size:11px;}
+  .main-content{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
+  .tab-bar{height:28px;background:var(--panel-bg);border-bottom:1px solid var(--sidebar-border);display:flex;align-items:stretch;padding:0;overflow-x:auto;}
+  .tab-bar::-webkit-scrollbar{height:3px;}
+  .session-tab{padding:0 12px;display:flex;align-items:center;font-size:11.5px;color:var(--text-dim);border-right:1px solid var(--section-border);cursor:pointer;white-space:nowrap;min-width:0;background:var(--panel-header);gap:4px;}
+  .session-tab:hover{color:var(--text);background:var(--btn-hover);}
+  .session-tab.active{color:var(--text-bright);background:var(--bg);border-bottom:2px solid var(--accent);margin-bottom:-1px;}
+  .session-tab .close-btn{font-size:14px;line-height:1;color:var(--text-dim);padding:0 2px;margin-left:2px;}
+  .session-tab .close-btn:hover{color:var(--danger);}
+  .add-tab{padding:0 10px;display:flex;align-items:center;font-size:16px;color:var(--text-dim);cursor:pointer;border-right:1px solid var(--section-border);background:var(--panel-header);}
+  .add-tab:hover{color:var(--text-bright);background:var(--btn-hover);}
+  .result-area{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;}
+  .statusbar{height:22px;background:var(--panel-bg);border-top:1px solid var(--sidebar-border);display:flex;align-items:center;padding:0 10px;gap:12px;font-size:10.5px;color:var(--status-text);}
+  .statusbar .sep{width:1px;height:12px;background:var(--status-sep);}
+  .statusbar b{color:var(--status-b);font-weight:600;}
+  .table-container{flex:1;overflow:auto;background:var(--table-bg);}
+  table{width:100%;border-collapse:collapse;font-size:11.5px;min-width:1100px;}
+  thead{position:sticky;top:0;z-index:2;}
+  th{background:var(--th-bg);padding:7px 10px;text-align:left;font-weight:600;font-size:10.5px;color:var(--th-text);text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--border);white-space:nowrap;border-right:1px solid var(--td-border);}
+  th:last-child{border-right:none;}
+  td{padding:6px 10px;border-bottom:1px solid var(--td-border);border-right:1px solid var(--td-border);vertical-align:top;color:var(--td-text);}
+  td:last-child{border-right:none;}
+  tbody tr:nth-child(even){background:var(--table-alt);}
+  tbody tr:hover{background:var(--table-hover);color:var(--text-bright);}
+  tbody tr:hover td{color:var(--text);}
+  td code{font-family:"Cascadia Code","JetBrains Mono","Fira Code","Consolas",monospace;font-size:11px;background:var(--code-bg);padding:1px 6px;color:var(--code-color);}
+  .tag{display:inline-block;padding:1px 7px;font-size:10.5px;font-weight:600;letter-spacing:.2px;}
+  .tag-high{background:var(--danger-bg);color:var(--danger-text);border:1px solid var(--danger-border);}
+  .tag-mid{background:var(--warning-bg);color:var(--warning-text);border:1px solid var(--warning-border);}
+  .tag-low{background:var(--success-bg);color:var(--success-text);border:1px solid var(--success-border);}
+  .tag-type{background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);}
+  .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--empty-color);user-select:none;}
+  .empty-state .icon{font-size:42px;margin-bottom:12px;opacity:.4;}
+  .empty-state .title{font-size:14px;color:var(--empty-title);margin-bottom:4px;}
+  .empty-state .sub{font-size:11px;color:var(--empty-sub);}
+  /* 流式输出区域 */
+  .stream-area{flex:1;overflow-y:auto;padding:16px 20px;font-family:"Cascadia Code","JetBrains Mono","Fira Code","Consolas",monospace;font-size:12px;line-height:1.65;background:var(--stream-bg);}
+  .stream-thinking{color:var(--think-text);margin-bottom:8px;padding:8px 12px;background:var(--stream-think);border-radius:4px;white-space:pre-wrap;}
+  .stream-label{font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;}
+  .stream-text{white-space:pre-wrap;color:var(--text);}
+  .stream-cursor{display:inline-block;width:8px;height:14px;background:var(--accent);animation:blink .8s infinite;vertical-align:middle;margin-left:2px;}
+  @keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
+  .toast-wrap{position:fixed;top:36px;right:10px;z-index:10000;display:flex;flex-direction:column;gap:4px;}
+  .toast-item{background:var(--toast-bg);color:var(--toast-text);padding:6px 14px;font-size:11.5px;border-left:3px solid var(--accent);animation:toastIn .2s ease-out;box-shadow:0 2px 8px rgba(0,0,0,.2);}
+  .toast-item.error{border-left-color:var(--danger);}
+  @keyframes toastIn{from{opacity:0;transform:translateX(20px);}}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-track{background:var(--scrollbar-track);}
+  ::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);}
+  ::-webkit-scrollbar-thumb:hover{background:var(--scrollbar-thumb-hover);}
+  ::-webkit-scrollbar-corner{background:var(--scrollbar-track);}
+  /* 模态框 */
+  .modal-overlay{position:fixed;inset:0;z-index:9990;background:var(--modal-overlay);display:flex;align-items:center;justify-content:center;}
+  .modal{width:680px;max-width:95vw;max-height:85vh;background:var(--modal-bg);border:1px solid var(--modal-border);display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.3);}
+  .modal-header{height:30px;background:var(--panel-header);border-bottom:1px solid var(--section-border);display:flex;align-items:center;padding:0 10px;gap:8px;font-size:11.5px;font-weight:600;color:var(--text-dim);}
+  .modal-header-spacer{flex:1;}
+  .modal-close{height:20px;width:26px;background:none;border:1px solid transparent;color:var(--text-dim);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;}
+  .modal-close:hover{background:var(--danger-bg);border-color:var(--danger-border);color:var(--danger-text);}
+  .modal-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
+  .modal-textarea{width:100%;min-height:140px;padding:8px 10px;background:var(--input-bg);border:1px solid var(--input-border);color:var(--text);font-family:"Cascadia Code","JetBrains Mono","Fira Code","Consolas",monospace;font-size:12px;line-height:1.6;resize:vertical;outline:none;}
+  .modal-textarea:focus{border-color:var(--input-focus);}
+  .modal-textarea.lg{min-height:260px;}
+  .modal-footer{padding:10px 14px;border-top:1px solid var(--section-border);display:flex;gap:8px;justify-content:flex-end;}
+  /* 聊天 */
+  .chat-modal{width:620px;max-width:95vw;height:75vh;max-height:700px;}
+  .chat-area{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--bg);}
+  .chat-msg{display:flex;flex-direction:column;max-width:85%;animation:msgIn .2s ease-out;}
+  .chat-msg.user{align-self:flex-end;}
+  .chat-msg.ai{align-self:flex-start;}
+  @keyframes msgIn{from{opacity:0;transform:translateY(8px);}}
+  .chat-bubble{padding:10px 14px;font-size:12.5px;line-height:1.55;word-break:break-word;}
+  .chat-msg.user .chat-bubble{background:var(--accent);color:#fff;border-radius:12px 4px 12px 12px;}
+  .chat-msg.ai .chat-bubble{background:var(--btn-bg);color:var(--text);border-radius:4px 12px 12px 12px;border:1px solid var(--border);}
+  .chat-thinking-toggle{font-size:10px;color:var(--text-dim);cursor:pointer;padding:2px 8px;align-self:flex-start;user-select:none;margin-top:2px;}
+  .chat-thinking-content{font-size:10.5px;color:var(--text-dim);background:var(--think-bg);padding:8px 10px;margin-top:4px;border-radius:6px;white-space:pre-wrap;line-height:1.5;max-height:160px;overflow-y:auto;align-self:stretch;display:none;}
+  .chat-input-row{display:flex;gap:6px;padding:10px 14px;border-top:1px solid var(--section-border);background:var(--panel-bg);}
+  .chat-input{flex:1;height:36px;padding:0 10px;background:var(--input-bg);border:1px solid var(--input-border);color:var(--text);font-family:inherit;font-size:12.5px;outline:none;border-radius:4px;}
+  .chat-input:focus{border-color:var(--input-focus);}
+  .chat-input:disabled{opacity:.5;}
+  .chat-send-btn{height:36px;padding:0 16px;background:var(--accent-dim);border:1px solid var(--accent);color:#fff;font-weight:600;font-size:12.5px;cursor:pointer;font-family:inherit;border-radius:4px;white-space:nowrap;}
+  .chat-send-btn:hover{background:var(--accent);}
+  .chat-send-btn:disabled{opacity:.4;pointer-events:none;}
+  .chat-typing{align-self:flex-start;padding:10px 14px;font-size:12px;color:var(--text-dim);display:flex;gap:3px;}
+  .chat-typing span{width:6px;height:6px;background:var(--text-dim);border-radius:50%;animation:typeBounce 1.2s infinite;}
+  .chat-typing span:nth-child(2){animation-delay:.2s;}.chat-typing span:nth-child(3){animation-delay:.4s;}
+  @keyframes typeBounce{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-4px);}}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <span class="toolbar-title">AI 测试用例生成器</span>
+  <span class="toolbar-spacer"></span>
+  <span class="toolbar-info">模型:</span><span class="toolbar-prompt" id="toolbarModel">-</span>
+  <span class="toolbar-info">提示词:</span><span class="toolbar-prompt" id="toolbarPrompt">-</span>
+  <button class="theme-btn" id="chatBtn" onclick="openChat()">💬 AI 对话</button>
+  <button class="theme-btn" id="themeToggle" onclick="toggleTheme()">☀</button>
+</div>
+
+<div class="workspace">
+  <!-- ═══ 侧边栏 ═══ -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="section-header" onclick="toggleSection(this)">API 配置</div>
+      <div class="section-body">
+        <div class="field"><label class="field-label">Base URL</label><input class="field-input" id="baseUrl" placeholder="https://api.deepseek.com/anthropic" spellcheck="false"></div>
+        <div class="field"><label class="field-label">Model</label><input class="field-input" id="model" placeholder="deepseek-v4-pro[1M]" spellcheck="false"></div>
+        <div class="field"><label class="field-label">API Key</label><input class="field-input" type="text" id="apiKey" placeholder="sk-..." spellcheck="false" autocomplete="off" style="-webkit-text-security:disc;"></div>
+        <button class="btn btn-sm" onclick="saveConfig()">保存配置</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-header" onclick="toggleSection(this)">提示词</div>
+      <div class="section-body">
+        <div class="prompt-select-row" style="margin-bottom:6px;"><select class="prompt-select" id="promptSelect" onchange="onPromptSelect()"></select></div>
+        <div class="prompt-select-row">
+          <button class="btn btn-sm prompt-action" onclick="viewPrompt()" title="查看">👁</button>
+          <button class="btn btn-sm prompt-action" onclick="editPrompt()" title="编辑">✎</button>
+          <button class="btn btn-sm prompt-action" onclick="addPrompt()" title="新增">+</button>
+          <button class="btn btn-sm prompt-action btn-danger" onclick="deletePrompt()" title="删除" style="margin-left:auto;">🗑</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="flex:1;display:flex;flex-direction:column;">
+      <div class="section-header no-toggle">PRD 文档输入</div>
+      <textarea class="prd-editor" id="prdInput" placeholder="在此粘贴 PRD 文档内容...
+
+（Ctrl+Enter 换行，Enter 生成）" spellcheck="false" style="flex:1;border:none;" onkeydown="if(event.key==='Enter'){if(event.ctrlKey){event.target.value+='\n';event.preventDefault()}else{event.preventDefault();generate()}}"></textarea>
+      <div style="padding:3px 10px;display:flex;gap:3px;flex-wrap:wrap;background:var(--gen-btn-area-bg);border-top:1px solid var(--gen-btn-area-border);">
+        <span style="font-size:10px;color:var(--text-dim);line-height:22px;">示例:</span>
+        <button class="btn btn-sm" onclick="loadTemplate('login')">登录</button>
+        <button class="btn btn-sm" onclick="loadTemplate('shopcart')">购物车</button>
+        <button class="btn btn-sm" onclick="loadTemplate('usermgmt')">用户管理</button>
+        <button class="btn btn-sm" onclick="loadTemplate('order')">订单</button>
+      </div>
+      <div style="padding:3px 10px 6px;display:flex;gap:6px;background:var(--gen-btn-area-bg);">
+        <button class="btn btn-primary" id="generateBtn" onclick="generate()" style="flex:1;justify-content:center;">▶ 生成测试用例</button>
+        <button class="btn btn-sm btn-danger" id="stopBtn" onclick="stopGenerate()" title="停止生成" style="display:none;">■</button>
+        <button class="btn btn-sm" onclick="exportExcel()" title="导出 Excel">📥</button>
+        <button class="btn btn-sm" onclick="copyJSON()" title="复制 JSON">📋</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 主内容区 ═══ -->
+  <div class="main-content">
+    <div class="tab-bar" id="sessionTabs">
+      <div class="session-tab active" data-sid="s1" onclick="switchSession('s1')">会话 1</div>
+      <div class="add-tab" onclick="addSession()" title="新建会话">＋</div>
+    </div>
+    <div class="result-area" id="resultArea">
+      <div class="empty-state" id="emptyState">
+        <div class="icon">◻</div><div class="title">暂无测试用例</div>
+        <div class="sub">在左侧面板粘贴 PRD 内容后点击「生成测试用例」</div>
+      </div>
+      <div class="stream-area" id="streamArea" style="display:none;"></div>
+      <div id="resultCard" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+        <div class="table-container"><table><thead><tr>
+          <th style="width:72px;">编号</th><th style="width:90px;">模块</th><th style="min-width:160px;">标题</th>
+          <th style="min-width:120px;">前置条件</th><th style="min-width:180px;">测试步骤</th><th style="min-width:180px;">预期结果</th><th style="width:80px;">类型</th><th style="width:56px;">优先级</th>
+        </tr></thead><tbody id="tableBody"></tbody></table></div>
+        <div class="statusbar" id="statsBar"><span>就绪</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 提示词编辑模态框 -->
+<div class="modal-overlay" id="promptModal" style="display:none;" onclick="if(event.target===this)closeModal()">
+  <div class="modal"><div class="modal-header"><span id="modalTitle">编辑提示词</span><span class="modal-header-spacer"></span><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label class="field-label">名称</label><input class="field-input" id="editName"></div>
+      <div class="field"><label class="field-label">System Prompt</label><textarea class="modal-textarea lg" id="editSystem"></textarea></div>
+      <div class="field"><label class="field-label">User Template<span style="font-weight:400;text-transform:none;"> 变量: {prd_text}</span></label><textarea class="modal-textarea" id="editUser"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="modalDeleteBtn" style="display:none;margin-right:auto;" onclick="deleteCurrentPrompt()">删除</button>
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="savePrompt()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 聊天窗口 -->
+<div class="modal-overlay" id="chatModal" style="display:none;" onclick="if(event.target===this)closeChat()">
+  <div class="modal chat-modal"><div class="modal-header"><span>AI 对话</span><span class="modal-header-spacer"></span><span style="font-size:10px;color:var(--text-dim);margin-right:4px;" id="chatModelLabel"></span><button class="btn btn-sm" onclick="clearChat()" title="清空" style="margin-right:4px;">清空</button><button class="modal-close" onclick="closeChat()">✕</button></div>
+    <div class="chat-area" id="chatArea"><div style="text-align:center;color:var(--empty-color);padding:40px 0;font-size:12px;">发送消息开始对话</div></div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chatInput" placeholder="输入消息..." onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="chat-send-btn" id="chatSendBtn" onclick="sendChat()">发送</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+// ── 配置 ──
+const CFG_KEY='tcgen_config',PROMPT_STORE_KEY='tcgen_prompts',STORE_KEY='tcgen_sessions';
+let allPrompts=[],modalMode='add',editingPromptId=null;
+
+function loadConfig(){try{return JSON.parse(localStorage.getItem(CFG_KEY))||{};}catch(e){return{};}}
+function applyConfig(){
+  const c=loadConfig();
+  document.getElementById('baseUrl').value=c.baseUrl||'https://api.deepseek.com/anthropic';
+  document.getElementById('model').value=c.model||'deepseek-v4-pro[1M]';
+  document.getElementById('apiKey').value=c.apiKey||'';
+  document.getElementById('toolbarModel').textContent=c.model||'deepseek-v4-pro[1M]';
+  refreshPromptSelect();
+}
+function saveConfig(){
+  const c=loadConfig();
+  c.baseUrl=document.getElementById('baseUrl').value.trim();
+  c.model=document.getElementById('model').value.trim();
+  c.apiKey=document.getElementById('apiKey').value.trim();
+  localStorage.setItem(CFG_KEY,JSON.stringify(c));applyConfig();toast('配置已保存');
+}
+
+// ── 主题 ──
+function toggleTheme(){
+  const h=document.documentElement,n=h.getAttribute('data-theme')==='light'?'dark':'light';
+  h.setAttribute('data-theme',n);document.getElementById('themeToggle').textContent=n==='light'?'☾':'☀';
+  localStorage.setItem('tcgen_theme',n);
+}
+(function(){const s=localStorage.getItem('tcgen_theme')||'light';document.documentElement.setAttribute('data-theme',s);document.getElementById('themeToggle').textContent=s==='light'?'☾':'☀';})();
+
+function toggleSection(h){h.classList.toggle('collapsed');h.nextElementSibling.classList.toggle('collapsed');}
+function toast(m,t){const e=document.createElement('div');e.className='toast-item '+(t||'');e.textContent=m;document.getElementById('toastWrap').appendChild(e);setTimeout(()=>{e.style.opacity='0';e.style.transition='opacity .3s';},2200);setTimeout(()=>e.remove(),2600);}
+
+// ── 提示词 ──
+async function fetchPrompts(){
+  try{
+    const r=await fetch('/api/prompts');const d=await r.json();
+    allPrompts=d.prompts||[];
+  }catch(e){
+    if(!allPrompts.length)allPrompts=[{id:'comprehensive',name:'默认',system:'',user:'请根据以下 PRD 文档，生成测试用例：\n\n{prd_text}'}];
+  }
+}
+async function syncPrompts(){try{await fetch('/api/prompts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompts:allPrompts})});}catch(e){toast('同步失败','error');}}
+function getActivePromptId(){
+  const c=loadConfig();
+  const id=c.activePrompt||'comprehensive';
+  // 如果保存的 id 不在提示词列表中，回退到第一个
+  if(allPrompts.length&&!allPrompts.find(p=>p.id===id)){
+    c.activePrompt=allPrompts[0].id;localStorage.setItem(CFG_KEY,JSON.stringify(c));
+    return allPrompts[0].id;
+  }
+  return id;
+}
+function getActivePrompt(){const id=getActivePromptId();return allPrompts.find(p=>p.id===id)||allPrompts[0]||null;}
+function refreshPromptSelect(){
+  if(!allPrompts.length)return;
+  const aid=getActivePromptId(),sel=document.getElementById('promptSelect');
+  sel.innerHTML=allPrompts.map(p=>`<option value="${p.id}" ${p.id===aid?'selected':''}>${escHtml(p.name)}</option>`).join('');
+  const a=getActivePrompt();if(a)document.getElementById('toolbarPrompt').textContent=a.name;
+}
+function onPromptSelect(){const c=loadConfig();c.activePrompt=document.getElementById('promptSelect').value;localStorage.setItem(CFG_KEY,JSON.stringify(c));document.getElementById('toolbarPrompt').textContent=getActivePrompt().name;}
+function viewPrompt(){openPromptModal('view');}
+function editPrompt(){openPromptModal('edit');}
+function addPrompt(){openPromptModal('add');}
+function openPromptModal(mode){
+  modalMode=mode;const p=mode==='add'?{id:null,name:'',system:'',user:'请根据以下 PRD 文档，生成完整的测试用例：\n\n{prd_text}'}:getActivePrompt();
+  editingPromptId=mode==='add'?null:p.id;const ro=mode==='view';
+  document.getElementById('modalTitle').textContent={view:'查看提示词',edit:'编辑提示词',add:'新增提示词'}[mode];
+  document.getElementById('editName').value=p.name;document.getElementById('editName').disabled=ro;
+  document.getElementById('editSystem').value=p.system;document.getElementById('editSystem').disabled=ro;
+  document.getElementById('editUser').value=p.user;document.getElementById('editUser').disabled=ro;
+  document.getElementById('modalDeleteBtn').style.display=mode==='edit'?'':'none';
+  document.querySelector('#promptModal .btn-primary').style.display=ro?'none':'';
+  document.getElementById('promptModal').style.display='';
+}
+function closeModal(){document.getElementById('promptModal').style.display='none';document.getElementById('editName').disabled=false;document.getElementById('editSystem').disabled=false;document.getElementById('editUser').disabled=false;document.getElementById('modalDeleteBtn').style.display='none';document.querySelector('#promptModal .btn-primary').style.display='';}
+async function savePrompt(){
+  const name=document.getElementById('editName').value.trim(),system=document.getElementById('editSystem').value.trim();
+  let user=document.getElementById('editUser').value.trim();
+  if(!name){toast('请输入名称','error');return;}if(!system){toast('请输入 System Prompt','error');return;}
+  if(!user)user='请根据以下 PRD 文档，生成完整的测试用例：\n\n{prd_text}';
+  if(modalMode==='add'){const id='custom_'+Date.now();allPrompts.push({id,name,system,user});const c=loadConfig();c.activePrompt=id;localStorage.setItem(CFG_KEY,JSON.stringify(c));}
+  else{const i=allPrompts.findIndex(p=>p.id===editingPromptId);if(i>=0)allPrompts[i]={...allPrompts[i],name,system,user};}
+  await syncPrompts();refreshPromptSelect();closeModal();toast(modalMode==='add'?'已创建':'已保存');
+}
+async function deletePrompt(){
+  if(allPrompts.length<=1){toast('至少保留一个','error');return;}const p=getActivePrompt();if(!confirm('删除「'+p.name+'」？'))return;
+  allPrompts=allPrompts.filter(pr=>pr.id!==p.id);const c=loadConfig();c.activePrompt=allPrompts[0].id;localStorage.setItem(CFG_KEY,JSON.stringify(c));
+  await syncPrompts();refreshPromptSelect();toast('已删除');
+}
+async function deleteCurrentPrompt(){
+  if(allPrompts.length<=1){toast('至少保留一个','error');return;}if(!confirm('删除此提示词？'))return;
+  allPrompts=allPrompts.filter(p=>p.id!==editingPromptId);const c=loadConfig();c.activePrompt=allPrompts[0].id;localStorage.setItem(CFG_KEY,JSON.stringify(c));
+  await syncPrompts();refreshPromptSelect();closeModal();toast('已删除');
+}
+
+// ── 会话管理 ──
+let sessions=[{id:'s1',name:'会话 1',messages:[],testCases:[]}],activeSessionId='s1';
+function loadSessions(){try{const s=localStorage.getItem(STORE_KEY);if(s){const d=JSON.parse(s);if(d.length) sessions=d;}}catch(e){}}
+function saveSessions(){localStorage.setItem(STORE_KEY,JSON.stringify(sessions));}
+function getSession(){return sessions.find(s=>s.id===activeSessionId)||sessions[0];}
+function switchSession(sid){
+  activeSessionId=sid;const s=getSession();
+  document.querySelectorAll('.session-tab').forEach(t=>t.classList.toggle('active',t.dataset.sid===sid));
+  if(s.testCases.length){
+    hideEmpty();document.getElementById('resultCard').style.display='flex';
+    renderTable(s.testCases);renderStats(s.testCases,null);
+  }else{
+    hideResult();showEmpty();
+    if(s.messages.length)document.getElementById('emptyState').querySelector('.sub').textContent='此会话有 '+s.messages.length+' 条对话记录，但无测试用例';
+  }
+}
+function addSession(){
+  const id='s'+Date.now(),n='会话 '+(sessions.length+1);
+  sessions.push({id,name:n,messages:[],testCases:[]});
+  activeSessionId=id;saveSessions();renderSessionTabs();switchSession(id);
+}
+function renameSession(sid,name){
+  const s=sessions.find(s=>s.id===sid);if(s){s.name=name;saveSessions();renderSessionTabs();}
+}
+function closeSession(sid){
+  if(sessions.length<=1)return;
+  sessions=sessions.filter(s=>s.id!==sid);
+  if(activeSessionId===sid)activeSessionId=sessions[0].id;
+  saveSessions();renderSessionTabs();switchSession(activeSessionId);
+}
+function renderSessionTabs(){
+  const bar=document.getElementById('sessionTabs');
+  bar.innerHTML=sessions.map(s=>
+    `<div class="session-tab${s.id===activeSessionId?' active':''}" data-sid="${s.id}" onclick="switchSession('${s.id}')" ondblclick="renameSession('${s.id}',prompt('新名称:','${s.name}')||'${s.name}')">${escHtml(s.name)}${sessions.length>1?`<span class="close-btn" onclick="event.stopPropagation();closeSession('${s.id}')">×</span>`:''}</div>`
+  ).join('')+'<div class="add-tab" onclick="addSession()" title="新建会话">＋</div>';
+}
+
+// ── 生成（流式） ──
+let currentStreamAbort=null,fullText='',fullThinking='',contentBlockType='';
+async function generate(){
+  const prd=document.getElementById('prdInput').value.trim();
+  const cfg=loadConfig();const ak=cfg.apiKey||'',bu=cfg.baseUrl||'https://api.deepseek.com/anthropic',md=cfg.model||'deepseek-v4-pro[1M]';
+  const prompt=getActivePrompt();
+  if(!prd){toast('请输入 PRD 内容','error');return;}if(!ak){toast('请配置 API Key','error');return;}
+
+  const session=getSession();
+  if(!session){toast('会话异常','error');return;}
+
+  const btn=document.getElementById('generateBtn');btn.disabled=true;btn.textContent='⏳ 生成中...';
+  document.getElementById('stopBtn').style.display='';
+  hideResult();hideEmpty();
+  document.getElementById('resultCard').style.display='none';
+
+  // 流式输出区域：始终可见，每次生成追加一个新 block
+  const area=document.getElementById('streamArea');
+  area.style.display='';
+  if(area.childNodes.length>0){
+    const sep=document.createElement('hr');sep.style.cssText='border-color:var(--border);margin:12px 0;';
+    area.appendChild(sep);
+  }
+  const block=document.createElement('div');
+  area.appendChild(block);
+  area.scrollTop=area.scrollHeight;
+  fullText='';fullThinking='';
+
+  try{
+    if(currentStreamAbort)currentStreamAbort.abort();
+    const ctrl=new AbortController();currentStreamAbort=ctrl;
+    const resp=await fetch('/api/generate/stream',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prd,api_key:ak,base_url:bu,model:md,system_prompt:prompt?prompt.system:'',user_template:prompt?prompt.user:'',messages:session.messages.slice(-10)}),
+      signal:ctrl.signal,
+    });
+    if(!resp.ok){block.innerHTML='<div style="color:var(--danger)">请求失败: '+resp.status+'</div>';return;}
+    const reader=resp.body.getReader(),decoder=new TextDecoder();
+    let buf='';
+    while(true){const{value,done}=await reader.read();if(done)break;
+      buf+=decoder.decode(value,{stream:true});
+      while(buf.includes('\n\n')){
+        const idx=buf.indexOf('\n\n'),line=buf.substring(0,idx);buf=buf.substring(idx+2);
+        if(line.startsWith('data: '))try{const ev=JSON.parse(line.substring(6));updateStream(ev,area,block);}catch(e){}
+      }
+    }
+  }catch(e){if(e.name!=='AbortError')block.innerHTML='<div style="color:var(--danger)">错误: '+escHtml(e.message)+'</div>';}
+  finally{
+    document.getElementById('generateBtn').disabled=false;document.getElementById('generateBtn').textContent='▶ 生成测试用例';
+    document.getElementById('stopBtn').style.display='none';currentStreamAbort=null;
+    // 保存到会话历史
+    const um=(prompt&&prompt.user?prompt.user:'请根据以下 PRD 文档，生成完整的测试用例：\n\n{prd_text}').replace('{prd_text}',prd);
+    session.messages.push({role:'user',content:um});session.messages.push({role:'assistant',content:fullText});saveSessions();
+    if(document.getElementById('chatModal').style.display!=='none')rebuildChatHistory();
+    // 解析 JSON → 表格
+    try{
+      const jsonStr=extractJson(fullText),data=JSON.parse(jsonStr),tc=data.test_cases||[];
+      if(tc.length>0){
+        session.testCases=tc;block.innerHTML+=`<div style="color:var(--accent);font-weight:600;margin-top:8px;">✅ 已生成 ${tc.length} 条测试用例（下方表格）</div>`;
+        document.getElementById('resultCard').style.display='flex';renderTable(tc);renderStats(tc,null);
+      }else{block.innerHTML=renderStreamHTML(true);}
+    }catch(e){block.innerHTML=renderStreamHTML(true);}
+  }
+}
+
+function updateStream(ev,area,block){
+  if(ev.type==='error'){block.innerHTML='<div style="color:var(--danger)">'+escHtml(ev.message||'流式错误')+'</div>';return;}
+  if(ev.type==='block_start'){contentBlockType=ev.content_type||'text';}
+  else if(ev.type==='thinking'){fullThinking+=ev.thinking||'';block.innerHTML=renderStreamHTML();}
+  else if(ev.type==='text'){fullText+=ev.text||'';block.innerHTML=renderStreamHTML();}
+  else if(ev.type==='done'){block.innerHTML=renderStreamHTML(true);}
+  if(area.scrollHeight-area.scrollTop-area.clientHeight<60)area.scrollTop=area.scrollHeight;
+}
+function renderStreamHTML(done){
+  let h='';
+  if(fullThinking)h+='<div class="stream-label">💭 思考过程</div><div class="stream-thinking">'+escHtml(fullThinking)+'</div>';
+  h+='<div class="stream-label">📄 生成结果</div><div class="stream-text">'+escHtml(fullText)+(done?'':'<span class="stream-cursor"></span>')+'</div>';
+  return h;
+}
+
+function extractJson(t){
+  t=t.trim();const m=t.match(/```(?:json)?\s*([\s\S]*?)```/);if(m)return m[1].trim();
+  const s=t.indexOf('{'),e=t.lastIndexOf('}');if(s!==-1&&e!==-1)return t.substring(s,e+1);return t;
+}
+
+function stopGenerate(){
+  if(currentStreamAbort){currentStreamAbort.abort();currentStreamAbort=null;}
+  document.getElementById('generateBtn').disabled=false;document.getElementById('generateBtn').textContent='▶ 生成测试用例';
+  document.getElementById('stopBtn').style.display='none';
+  toast('已停止生成');
+}
+
+// ── 聊天 ──
+function openChat(){
+  const cfg=loadConfig();if(!cfg.apiKey){toast('请先配置 API Key','error');return;}
+  document.getElementById('chatModelLabel').textContent='模型: '+(cfg.model||'deepseek-v4-pro[1M]');
+  document.getElementById('chatModal').style.display='';document.getElementById('chatInput').focus();
+  rebuildChatHistory();
+}
+function rebuildChatHistory(){
+  const area=document.getElementById('chatArea'),s=getSession();
+  area.innerHTML='';
+  if(s&&s.messages.length){
+    s.messages.forEach(m=>appendChatMsg(m.role,m.content,null));
+  }else{
+    area.innerHTML='<div style="text-align:center;color:var(--empty-color);padding:40px 0;font-size:12px;">发送消息开始对话</div>';
+  }
+}
+function closeChat(){document.getElementById('chatModal').style.display='none';}
+function clearChat(){const s=getSession();s.messages=[];saveSessions();document.getElementById('chatArea').innerHTML='<div style="text-align:center;color:var(--empty-color);padding:40px 0;font-size:12px;">对话已清空</div>';}
+function appendChatMsg(role,content,reasoning){
+  const area=document.getElementById('chatArea'),ph=area.querySelector('div[style]');if(ph)ph.remove();
+  const cls=role==='user'?'user':'ai',div=document.createElement('div');div.className='chat-msg '+cls;
+  div.innerHTML='<div class="chat-bubble">'+escHtml(content)+'</div>';
+  if(reasoning){const tid='ct_'+Date.now();div.innerHTML+='<span class="chat-thinking-toggle" onclick="toggleChatThink(\''+tid+'\')">💭 查看思考</span><div class="chat-thinking-content" id="'+tid+'">'+escHtml(reasoning)+'</div>';}
+  area.appendChild(div);area.scrollTop=area.scrollHeight;
+}
+function toggleChatThink(id){const e=document.getElementById(id),t=e.previousElementSibling;if(e.style.display==='block'){e.style.display='none';t.textContent='💭 查看思考';}else{e.style.display='block';t.textContent='💭 收起思考';}}
+async function sendChat(){
+  const input=document.getElementById('chatInput'),msg=input.value.trim();if(!msg)return;
+  const cfg=loadConfig(),ak=cfg.apiKey||'',bu=cfg.baseUrl||'https://api.deepseek.com/anthropic',md=cfg.model||'deepseek-v4-pro[1M]';
+  if(!ak){toast('请配置 API Key','error');return;}
+  input.value='';input.focus();
+  const session=getSession();
+  flog('info','[chat] session='+session.id+' msgs_before='+session.messages.length);
+  appendChatMsg('user',msg);session.messages.push({role:'user',content:msg});saveSessions();
+  flog('info','[chat] sending '+session.messages.length+' messages to API');
+
+  document.getElementById('chatInput').disabled=true;document.getElementById('chatSendBtn').disabled=true;document.getElementById('chatSendBtn').textContent='...';
+  const typingEl=document.createElement('div');typingEl.className='chat-msg ai';typingEl.innerHTML='<div class="chat-typing"><span></span><span></span><span></span></div>';
+  document.getElementById('chatArea').appendChild(typingEl);document.getElementById('chatArea').scrollTop=document.getElementById('chatArea').scrollHeight;
+
+  try{
+    const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:ak,base_url:bu,model:md,messages:session.messages})});
+    const data=await resp.json();typingEl.remove();
+    if(!resp.ok){appendChatMsg('ai','❌ '+(data.error||'失败'));return;}
+    appendChatMsg('ai',data.content||'(空)',data.reasoning);
+    session.messages.push({role:'assistant',content:data.content||''});saveSessions();
+  }catch(e){typingEl.remove();appendChatMsg('ai','❌ 网络错误: '+e.message);}
+  finally{document.getElementById('chatInput').disabled=false;document.getElementById('chatSendBtn').disabled=false;document.getElementById('chatSendBtn').textContent='发送';document.getElementById('chatInput').focus();}
+}
+
+// ── 表格渲染 ──
+function renderTable(cases){document.getElementById('tableBody').innerHTML=cases.map(tc=>`<tr><td><code>${esc(tc.id)}</code></td><td>${esc(tc.module)}</td><td><strong>${esc(tc.title)}</strong></td><td>${esc(tc.precondition)}</td><td style="white-space:pre-wrap">${esc(tc.steps)}</td><td style="white-space:pre-wrap">${esc(tc.expected)}</td><td><span class="tag tag-type">${esc(tc.type)}</span></td><td><span class="tag ${priTag(tc.priority)}">${esc(tc.priority)}</span></td></tr>`).join('');}
+function priTag(p){if(p==='高')return'tag-high';if(p==='中')return'tag-mid';return'tag-low';}
+function renderStats(cases,usage){
+  const bp={},bt={};cases.forEach(tc=>{bp[tc.priority]=(bp[tc.priority]||0)+1;bt[tc.type]=(bt[tc.type]||0)+1;});
+  let h=`<span>共 <b>${cases.length}</b> 条</span><span class="sep"></span>`;
+  Object.entries(bp).forEach(([k,v])=>{h+=`<span>${k}优先级 <b>${v}</b></span>`;});
+  h+='<span class="sep"></span>';
+  Object.entries(bt).forEach(([k,v])=>{h+=`<span>${k} <b>${v}</b></span>`;});
+  if(usage)h+=`<span class="sep"></span><span>Tokens: ${usage.total_tokens} (入${usage.prompt_tokens}+出${usage.completion_tokens})</span>`;
+  document.getElementById('statsBar').innerHTML=h;
+}
+function hideResult(){document.getElementById('resultCard').style.display='none';}
+function hideEmpty(){document.getElementById('emptyState').style.display='none';}
+function showEmpty(){document.getElementById('emptyState').style.display='flex';}
+
+async function exportExcel(){
+  const s=getSession();if(!s.testCases.length)return toast('无可用例','error');
+  try{
+    const r=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({test_cases:s.testCases})});
+    if(!r.ok){const d=await r.json();return toast(d.error||'失败','error');}
+    const b=await r.blob(),url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download='测试用例.xlsx';a.click();URL.revokeObjectURL(url);toast('已下载');
+  }catch(e){toast('失败: '+e.message,'error');}
+}
+async function copyJSON(){
+  const s=getSession();try{await navigator.clipboard.writeText(JSON.stringify(s.testCases,null,2));toast('已复制');}catch(e){toast('失败','error');}
+}
+
+// ── 快速模板 ──
+const DEMO_TEMPLATES={login:'## 登录功能需求\n\n### 功能概述\n用户通过账号密码登录系统，支持记住密码和忘记密码功能。\n\n### 详细需求\n1. 登录页面包含：账号输入框、密码输入框、记住密码复选框、登录按钮、忘记密码链接\n2. 账号支持手机号（11位）或邮箱格式\n3. 密码要求6-20位，支持字母数字和特殊字符\n4. 连续输错5次密码后账号锁定30分钟\n5. 登录成功后跳转到首页\n6. 勾选"记住密码"后7天内免登录\n7. 点击"忘记密码"跳转到密码重置页面\n\n### 界面要求\n- 登录表单居中显示\n- 输入框下方显示格式校验提示\n- 登录失败时显示错误信息',shopcart:'## 购物车功能需求\n\n### 功能概述\n用户可以将商品加入购物车，支持修改数量、删除、全选、结算等操作。\n\n### 详细需求\n1. 商品详情页点击"加入购物车"，加入成功提示\n2. 购物车页面展示：商品图片、名称、单价、数量（可加减）、小计、全选复选框\n3. 数量最少1，最多为库存量，加减按钮做上下限控制\n4. 支持单个删除和批量删除选中商品\n5. 全选/取消全选，显示已选商品总价\n6. 点击"结算"跳转到订单确认页\n7. 未登录时点击加入购物车弹出登录提示\n\n### 边界条件\n- 库存为0时显示"已售罄"\n- 购物车最多50种不同商品',usermgmt:'## 用户管理功能需求\n\n### 功能概述\n管理员对系统用户进行增删改查操作，支持角色分配和状态管理。\n\n### 详细需求\n1. 用户列表页分页展示，每页20条\n2. 列表包含：用户名、手机号、角色、状态、创建时间、操作\n3. 搜索功能：按用户名/手机号模糊搜索\n4. 新增用户：用户名、手机号、密码、角色\n5. 编辑用户：修改角色和状态\n6. 删除用户：二次确认弹窗\n7. 状态切换：启用/禁用\n8. 用户名唯一性校验\n\n### 权限控制\n- 仅管理员可访问\n- 普通用户提示"权限不足"',order:'## 订单管理功能需求\n\n### 功能概述\n用户查看订单列表、详情，支持取消订单、申请退款。\n\n### 详细需求\n1. 订单列表按时间倒序，支持按状态筛选\n2. 每个订单显示：订单号、商品、金额、状态、时间\n3. 点击进入详情，展示完整商品列表、地址、物流\n4. 待付款支持取消和去支付\n5. 待发货支持申请退款\n6. 已发货支持确认收货\n7. 状态流转：待付款→待发货→已发货→已完成\n\n### 异常场景\n- 支付超时30分钟自动取消\n- 库存不足时支付失败并退款'};
+function loadTemplate(k){const t=DEMO_TEMPLATES[k];if(!t)return;document.getElementById('prdInput').value=t;toast('已加载模板');}
+
+// ── 前端日志（上报到后端） ──
+function flog(level,msg){
+  console.log('[frontend]',msg);
+  fetch('/api/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level,message:msg})}).catch(()=>{});
+}
+
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function escHtml(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+(async function init(){
+  loadSessions();renderSessionTabs();
+  await fetchPrompts();applyConfig();
+})();
+</script>
+</body>
+</html>
