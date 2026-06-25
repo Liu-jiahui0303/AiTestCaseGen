@@ -14,8 +14,6 @@
 
 ---
 
-## 截图
-
 <table>
 <tr>
   <td><b>流式生成 & 多轮对话</b></td>
@@ -26,8 +24,6 @@
   <td><img src="image/excel用例.png" width="100%"></td>
 </tr>
 </table>
-
-![对话窗口](image/2.png)
 
 ---
 
