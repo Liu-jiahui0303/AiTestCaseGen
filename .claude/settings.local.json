@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python -W error -c \"import prompts.testcase_prompt\")"
+    ]
+  }
+}

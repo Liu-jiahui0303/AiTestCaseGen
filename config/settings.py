@@ -2,7 +2,7 @@
 DEFAULT_BASE_URL = "https://api.deepseek.com/anthropic"
 DEFAULT_MODEL = "deepseek-v4-pro[1M]"
 API_TIMEOUT = 180
-MAX_TOKENS = 16384
+MAX_TOKENS = 65536
 
 # Excel 表头
 EXCEL_HEADERS = ["用例编号", "测试模块", "测试标题", "前置条件", "测试步骤", "预期结果", "用例类型", "优先级"]
