@@ -470,19 +470,21 @@ async function generate(){
   }
 }
 
+let _streamRAF=null;
 function updateStream(ev,area,block){
   if(ev.type==='error'){block.innerHTML='<div style="color:var(--danger)">'+escHtml(ev.message||'流式错误')+'</div>';return;}
-  if(ev.type==='block_start'){contentBlockType=ev.content_type||'text';}
-  else if(ev.type==='thinking'){fullThinking+=ev.thinking||'';block.innerHTML=renderStreamHTML();}
-  else if(ev.type==='text'){fullText+=ev.text||'';block.innerHTML=renderStreamHTML();}
-  else if(ev.type==='done'){block.innerHTML=renderStreamHTML(true);}
-  if(area.scrollHeight-area.scrollTop-area.clientHeight<60)area.scrollTop=area.scrollHeight;
-}
-function renderStreamHTML(done){
-  let h='';
-  if(fullThinking)h+='<div class="stream-label">💭 思考过程</div><div class="stream-thinking">'+escHtml(fullThinking)+'</div>';
-  h+='<div class="stream-label">📄 生成结果</div><div class="stream-text">'+escHtml(fullText)+(done?'':'<span class="stream-cursor"></span>')+'</div>';
-  return h;
+  if(ev.type==='thinking'){fullThinking+=ev.thinking||'';}
+  else if(ev.type==='text'){fullText+=ev.text||'';}
+  // 节流：最多 60fps 更新 DOM
+  if(!_streamRAF)_streamRAF=requestAnimationFrame(()=>{
+    _streamRAF=null;
+    let h='';
+    if(fullThinking)h+='<div class="stream-label">💭 思考过程</div><div class="stream-thinking">'+escHtml(fullThinking)+'</div>';
+    h+='<div class="stream-label">📄 生成结果</div><div class="stream-text">'+escHtml(fullText)+'</div>';
+    if(ev.type!=='done')h=h.replace('</div></div>','<span class="stream-cursor"></span></div></div>');
+    block.innerHTML=h;
+    if(area.scrollHeight-area.scrollTop-area.clientHeight<60)area.scrollTop=area.scrollHeight;
+  });
 }
 
 function extractJson(t){
