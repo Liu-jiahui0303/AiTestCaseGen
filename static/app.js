@@ -96,13 +96,19 @@ async function deleteCurrentPrompt(){
 // ── 会话管理 ──
 let sessions=[{id:'s1',name:'会话 1',messages:[],testCases:[]}],activeSessionId='s1';
 function loadSessions(){try{const s=localStorage.getItem(STORE_KEY);if(s){const d=JSON.parse(s);if(d.length){sessions=d;const aid=localStorage.getItem('tcgen_active_sid');if(aid&&sessions.find(s=>s.id===aid))activeSessionId=aid;else activeSessionId=sessions[0].id;}}}catch(e){}}
-function saveSessions(){localStorage.setItem(STORE_KEY,JSON.stringify(sessions));localStorage.setItem('tcgen_active_sid',activeSessionId);}
+function saveSessions(){localStorage.setItem(STORE_KEY,JSON.stringify(sessions.map(s=>{const{_streamHTML,...r}=s;return r;})));localStorage.setItem('tcgen_active_sid',activeSessionId);}
 function getSession(){return sessions.find(s=>s.id===activeSessionId)||sessions[0];}
 function switchSession(sid){
+  // 同会话不处理
+  if(sid===activeSessionId)return;
+  // 保存当前会话的流式区域内容
+  const cur=getSession();if(cur)cur._streamHTML=document.getElementById('streamArea').innerHTML;
   activeSessionId=sid;const s=getSession();saveSessions();
   document.querySelectorAll('.session-tab').forEach(t=>t.classList.toggle('active',t.dataset.sid===sid));
-  // 清空流式区域，切到当前会话的状态
-  document.getElementById('streamArea').innerHTML='';document.getElementById('streamArea').style.display='none';
+  // 恢复目标会话的流式内容
+  const sa=document.getElementById('streamArea');
+  sa.innerHTML=s&&s._streamHTML?s._streamHTML:'';
+  sa.style.display=(s&&s._streamHTML)?'':'none';
   document.getElementById('rpTree').innerHTML='<div class="rp-empty">生成用例后自动展示</div>';
   document.getElementById('rpStats').textContent='暂无数据';
   document.getElementById('rpDetailSection').style.display='none';
@@ -117,7 +123,7 @@ function switchSession(sid){
 function addSession(){
   const id='s'+Date.now(),n='会话 '+(sessions.length+1);
   sessions.push({id,name:n,messages:[],testCases:[]});
-  activeSessionId=id;saveSessions();renderSessionTabs();switchSession(id);
+  saveSessions();renderSessionTabs();switchSession(id);
 }
 function renameSession(sid,name){
   const s=sessions.find(s=>s.id===sid);if(s){s.name=name;saveSessions();renderSessionTabs();}
@@ -185,6 +191,8 @@ async function generate(){
   finally{
     document.getElementById('generateBtn').disabled=false;document.getElementById('generateBtn').textContent='▶ 生成测试用例';
     document.getElementById('stopBtn').style.display='none';currentStreamAbort=null;
+    // 保存流式内容到会话（切标签时恢复）
+    session._streamHTML=document.getElementById('streamArea').innerHTML;
     // 保存到会话历史
     const um=(prompt&&prompt.user?prompt.user:'请根据以下 PRD 文档，生成完整的测试用例：\n\n{prd_text}').replace('{prd_text}',prd);
     session.messages.push({role:'user',content:um});session.messages.push({role:'assistant',content:fullText});saveSessions();
