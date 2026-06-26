@@ -330,7 +330,7 @@ function buildRightPanel(cases){
   // 目录树：按模块分组
   const byModule={};cases.forEach((tc,i)=>{const m=tc.module||'未分类';if(!byModule[m])byModule[m]=[];byModule[m].push({...tc,_idx:i});});
   const tree=document.getElementById('rpTree');
-  tree.innerHTML=Object.entries(byModule).map(([mod,list])=>`<div class="rp-module" onclick="toggleModule(this)"><span class="arrow">▶</span> ${escHtml(mod)} (${list.length})</div>${list.map(c=>`<div class="rp-case show" onclick="selectCase(${c._idx})" data-idx="${c._idx}">${escHtml(c.title)}</div>`).join('')}`).join('');
+  tree.innerHTML=Object.entries(byModule).map(([mod,list])=>`<div class="rp-module" onclick="toggleModule(this)"><span class="arrow">▶</span> ${escHtml(mod)} (${list.length})</div>${list.map(c=>`<div class="rp-case" style="display:none;" onclick="selectCase(${c._idx})" data-idx="${c._idx}">${escHtml(c.title)}</div>`).join('')}`).join('');
 }
 
 function toggleModule(el){
@@ -340,8 +340,21 @@ function toggleModule(el){
 }
 
 function selectCase(idx){
-  // 高亮树节点
-  document.querySelectorAll('.rp-case').forEach(e=>e.classList.toggle('active',parseInt(e.dataset.idx)===idx));
+  // 树节点：展开父模块 + 高亮 + 滚动到可见
+  document.querySelectorAll('.rp-case').forEach(e=>{
+    const match=parseInt(e.dataset.idx)===idx;
+    e.classList.toggle('active',match);
+    if(match){
+      // 展开父模块
+      let mod=e.previousElementSibling;
+      while(mod&&!mod.classList.contains('rp-module'))mod=mod.previousElementSibling;
+      if(mod&&!mod.classList.contains('open'))mod.classList.add('open');
+      // 展开所有同级 case
+      let sib=mod?mod.nextElementSibling:null;
+      while(sib&&sib.classList.contains('rp-case')){sib.style.display='block';sib=sib.nextElementSibling;}
+      e.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }
+  });
   // 高亮表格行
   document.querySelectorAll('#tableBody tr').forEach((tr,i)=>{tr.classList.toggle('selected',i===idx);if(i===idx)tr.scrollIntoView({behavior:'smooth',block:'center'});});
   // 显示详情
