@@ -47,6 +47,8 @@
 | 📥 **Excel 导出** | 表头蓝底白字、优先级行着色（红/橙/绿）、冻结首行、自动筛选 |
 | 🌓 **双主题** | 亮色/暗色一键切换，偏好自动保存 |
 | 📋 **快速模板** | 内置登录/购物车/用户管理/订单管理 4 套示例 PRD，新用户即刻体验 |
+| 📂 **用例目录** | 右侧面板按模块分组树形目录，点击定位详情，表格联动高亮 |
+| 🛑 **随时终止** | 生成过程中一键停止，已输出的内容保留不丢失 |
 
 ---
 
@@ -87,7 +89,10 @@ AiTestCaseGen/
 ├── utils/
 │   ├── logger.py               # 日志（控制台 + 文件）
 │   └── json_parser.py          # JSON 提取
-├── templates/index.html        # 前端 SPA
+├── static/
+│   ├── style.css                # 样式
+│   └── app.js                  # 前端逻辑
+├── templates/index.html        # 前端页面
 ├── logs/                       # 运行日志
 └── image/                      # 截图
 ```
@@ -116,6 +121,6 @@ AiTestCaseGen/
 ```python
 DEFAULT_BASE_URL = "https://api.deepseek.com/anthropic"
 DEFAULT_MODEL    = "deepseek-v4-pro[1M]"
-MAX_TOKENS       = 16384
+MAX_TOKENS       = 65536
 API_TIMEOUT      = 180
 ```
