@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
 </p>
 
-<h1 align="center">AI 测试用例生成器</h1>
+<h1 align="center">AI 测试用例生成器1</h1>
 
 <p align="center">
   <b>粘贴 PRD → AI 分析 → 流式生成 → 一键导出 Excel</b><br>
