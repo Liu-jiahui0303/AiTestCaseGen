@@ -2,7 +2,7 @@
 const CFG_KEY='tcgen_config',PROMPT_STORE_KEY='tcgen_prompts',STORE_KEY='tcgen_sessions';
 let allPrompts=[],modalMode='add',editingPromptId=null;
 
-function loadConfig(){try{return JSON.parse(localStorage.getItem(CFG_KEY))||{};}catch(e){return{};}}
+function loadConfig(){try{return JSON.parse(localStorage.getItem(CFG_KEY))||{};}catch(e){console.error('loadConfig:',e);return{};}}
 function applyConfig(){
   const c=loadConfig();
   document.getElementById('baseUrl').value=c.baseUrl||'https://api.deepseek.com/anthropic';
@@ -36,10 +36,11 @@ async function fetchPrompts(){
     const r=await fetch('/api/prompts');const d=await r.json();
     allPrompts=d.prompts||[];
   }catch(e){
+    console.error('fetchPrompts:',e);
     if(!allPrompts.length)allPrompts=[{id:'comprehensive',name:'默认',system:'',user:'请根据以下 PRD 文档，生成测试用例：\n\n{prd_text}'}];
   }
 }
-async function syncPrompts(){try{await fetch('/api/prompts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompts:allPrompts})});}catch(e){toast('同步失败','error');}}
+async function syncPrompts(){try{await fetch('/api/prompts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompts:allPrompts})});}catch(e){console.error('syncPrompts:',e);toast('同步失败','error');}}
 function getActivePromptId(){
   const c=loadConfig();
   const id=c.activePrompt||'comprehensive';
@@ -95,7 +96,7 @@ async function deleteCurrentPrompt(){
 
 // ── 会话管理 ──
 let sessions=[{id:'s1',name:'会话 1',messages:[],testCases:[]}],activeSessionId='s1';
-function loadSessions(){try{const s=localStorage.getItem(STORE_KEY);if(s){const d=JSON.parse(s);if(d.length){sessions=d;const aid=localStorage.getItem('tcgen_active_sid');if(aid&&sessions.find(s=>s.id===aid))activeSessionId=aid;else activeSessionId=sessions[0].id;}}}catch(e){}}
+function loadSessions(){try{const s=localStorage.getItem(STORE_KEY);if(s){const d=JSON.parse(s);if(d.length){sessions=d;const aid=localStorage.getItem('tcgen_active_sid');if(aid&&sessions.find(s=>s.id===aid))activeSessionId=aid;else activeSessionId=sessions[0].id;}}}catch(e){console.error('loadSessions:',e);}}
 function saveSessions(){localStorage.setItem(STORE_KEY,JSON.stringify(sessions.map(s=>{const{_streamHTML,...r}=s;return r;})));localStorage.setItem('tcgen_active_sid',activeSessionId);}
 function getSession(){return sessions.find(s=>s.id===activeSessionId)||sessions[0];}
 function switchSession(sid){
@@ -169,9 +170,10 @@ async function generate(){
   area.scrollTop=area.scrollHeight;
   fullText='';fullThinking='';
 
+  let ctrl=null;
   try{
     if(currentStreamAbort)currentStreamAbort.abort();
-    const ctrl=new AbortController();currentStreamAbort=ctrl;
+    ctrl=new AbortController();currentStreamAbort=ctrl;
     const resp=await fetch('/api/generate/stream',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({prd,api_key:ak,base_url:bu,model:md,system_prompt:prompt?prompt.system:'',user_template:prompt?prompt.user:'',messages:session.messages.slice(-10)}),
@@ -184,13 +186,13 @@ async function generate(){
       buf+=decoder.decode(value,{stream:true});
       while(buf.includes('\n\n')){
         const idx=buf.indexOf('\n\n'),line=buf.substring(0,idx);buf=buf.substring(idx+2);
-        if(line.startsWith('data: '))try{const ev=JSON.parse(line.substring(6));updateStream(ev,area,block);}catch(e){}
+        if(line.startsWith('data: '))try{const ev=JSON.parse(line.substring(6));updateStream(ev,area,block);}catch(e){console.error('SSE parse:',e);}
       }
     }
-  }catch(e){if(e.name!=='AbortError')block.innerHTML='<div style="color:var(--danger)">错误: '+escHtml(e.message)+'</div>';}
+  }catch(e){if(e.name!=='AbortError'){console.error('generate:',e);block.innerHTML='<div style="color:var(--danger)">错误: '+escHtml(e.message)+'</div>';}}
   finally{
     document.getElementById('generateBtn').disabled=false;document.getElementById('generateBtn').textContent='▶ 生成测试用例';
-    document.getElementById('stopBtn').style.display='none';currentStreamAbort=null;
+    document.getElementById('stopBtn').style.display='none';if(currentStreamAbort===ctrl)currentStreamAbort=null;
     // 保存流式内容到会话（切标签时恢复）
     session._streamHTML=document.getElementById('streamArea').innerHTML;
     // 保存到会话历史
@@ -203,8 +205,8 @@ async function generate(){
       if(tc.length>0){
         session.testCases=tc;block.innerHTML+=`<div style="color:var(--accent);font-weight:600;margin-top:8px;">✅ 已生成 ${tc.length} 条测试用例（下方表格）</div>`;
         document.getElementById('resultCard').style.display='flex';renderTable(tc);renderStats(tc,null);
-      }else{block.innerHTML=renderStreamHTML(true);}
-    }catch(e){block.innerHTML=renderStreamHTML(true);}
+      }else{block.innerHTML=_renderStreamHTML();}
+    }catch(e){console.error('JSON parse:',e);block.innerHTML=_renderStreamHTML();}
   }
 }
 
@@ -216,6 +218,7 @@ function updateStream(ev,area,block){
   // 节流：最多 60fps 更新 DOM
   if(!_streamRAF)_streamRAF=requestAnimationFrame(()=>{
     _streamRAF=null;
+    if(!block.isConnected)return;
     let h='';
     if(fullThinking)h+='<div class="stream-label">💭 思考过程</div><div class="stream-thinking">'+escHtml(fullThinking)+'</div>';
     h+='<div class="stream-label">📄 生成结果</div><div class="stream-text">'+escHtml(fullText)+'</div>';
@@ -225,6 +228,7 @@ function updateStream(ev,area,block){
   });
 }
 
+function _renderStreamHTML(){let h='';if(fullThinking)h+='<div class="stream-label">💭 思考过程</div><div class="stream-thinking">'+escHtml(fullThinking)+'</div>';h+='<div class="stream-label">📄 生成结果</div><div class="stream-text">'+escHtml(fullText)+'</div>';return h;}
 function extractJson(t){
   t=t.trim();const m=t.match(/```(?:json)?\s*([\s\S]*?)```/);if(m)return m[1].trim();
   const s=t.indexOf('{'),e=t.lastIndexOf('}');if(s!==-1&&e!==-1)return t.substring(s,e+1);return t;
@@ -309,10 +313,10 @@ async function exportExcel(){
     const r=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({test_cases:s.testCases})});
     if(!r.ok){const d=await r.json();return toast(d.error||'失败','error');}
     const b=await r.blob(),url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download='测试用例.xlsx';a.click();URL.revokeObjectURL(url);toast('已下载');
-  }catch(e){toast('失败: '+e.message,'error');}
+  }catch(e){console.error('exportExcel:',e);toast('失败: '+e.message,'error');}
 }
 async function copyJSON(){
-  const s=getSession();try{await navigator.clipboard.writeText(JSON.stringify(s.testCases,null,2));toast('已复制');}catch(e){toast('失败','error');}
+  const s=getSession();try{await navigator.clipboard.writeText(JSON.stringify(s.testCases,null,2));toast('已复制');}catch(e){console.error('copyJSON:',e);toast('失败','error');}
 }
 
 // ── 快速模板 ──
@@ -373,7 +377,7 @@ function selectCase(idx){
 // ── 前端日志（上报到后端） ──
 function flog(level,msg){
   console.log('[frontend]',msg);
-  fetch('/api/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level,message:msg})}).catch(()=>{});
+  fetch('/api/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level,message:msg})}).catch(e=>console.error('flog:',e));
 }
 
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}

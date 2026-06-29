@@ -1,4 +1,5 @@
 import json
+import time
 import httpx
 from typing import Generator
 
@@ -7,6 +8,12 @@ from prompts.testcase_prompt import SYSTEM_PROMPT, USER_MESSAGE_TEMPLATE
 from utils.logger import setup_logging
 
 log = setup_logging("ai")
+
+# 超时配置：connect/read/write/pool
+_API_TIMEOUT = httpx.Timeout(connect=30.0, read=float(API_TIMEOUT), write=30.0, pool=10.0)
+_STREAM_TIMEOUT = httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=10.0)
+_MAX_RETRIES = 2
+_RETRY_BACKOFF = 1.5  # 秒，指数增长
 
 
 class AIClient:
@@ -33,16 +40,28 @@ class AIClient:
         if system_prompt:
             body["system"] = system_prompt
 
-        log.info("Call %s model=%s msgs=%d", api_url, self._model, len(messages))
-        resp = httpx.post(api_url, headers=headers, json=body, timeout=API_TIMEOUT)
-
-        if not resp.is_success:
-            log.error("API error %s: %s", resp.status_code, resp.text[:500])
-            raise RuntimeError(f"API 请求失败 ({resp.status_code}): {resp.text[:300]}")
-
-        data = resp.json()
-        blocks = data.get("content", [])
-        return self._parse_blocks(blocks)
+        last_err = None
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                log.info("Call %s model=%s msgs=%d (attempt %d)", api_url, self._model, len(messages), attempt + 1)
+                resp = httpx.post(api_url, headers=headers, json=body, timeout=_API_TIMEOUT)
+                if resp.is_success:
+                    data = resp.json()
+                    blocks = data.get("content", [])
+                    return self._parse_blocks(blocks)
+                # 4xx 不重试
+                if 400 <= resp.status_code < 500:
+                    log.error("API client error %s: %s", resp.status_code, resp.text[:500])
+                    raise RuntimeError(f"API 请求失败 ({resp.status_code}): {resp.text[:300]}")
+                # 5xx 可重试
+                log.warning("API server error %s (attempt %d/%d)", resp.status_code, attempt + 1, _MAX_RETRIES + 1)
+                last_err = RuntimeError(f"API 请求失败 ({resp.status_code}): {resp.text[:300]}")
+            except (httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError) as e:
+                log.warning("Network error (attempt %d/%d): %s", attempt + 1, _MAX_RETRIES + 1, e)
+                last_err = e
+            if attempt < _MAX_RETRIES:
+                time.sleep(_RETRY_BACKOFF ** (attempt + 1))
+        raise last_err
 
     def _parse_blocks(self, blocks: list) -> dict:
         text_parts = []
@@ -77,24 +96,47 @@ class AIClient:
         if system_prompt:
             body["system"] = system_prompt
 
-        log.info("Stream call %s model=%s msgs=%d", api_url, self._model, len(messages))
-        with httpx.stream("POST", api_url, headers=headers, json=body, timeout=API_TIMEOUT) as resp:
-            if not resp.is_success:
-                log.error("Stream error %s: %s", resp.status_code, resp.text[:500])
-                yield {"type": "error", "message": f"API 请求失败 ({resp.status_code})"}
-                return
+        # 连接级别重试（流式连接失败时重试，一旦开始推流就不再重试）
+        last_err = None
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                log.info("Stream call %s model=%s msgs=%d (attempt %d)", api_url, self._model, len(messages), attempt + 1)
+                with httpx.stream("POST", api_url, headers=headers, json=body, timeout=_STREAM_TIMEOUT) as resp:
+                    if not resp.is_success:
+                        if 400 <= resp.status_code < 500:
+                            log.error("Stream client error %s: %s", resp.status_code, resp.text[:500])
+                            yield {"type": "error", "message": f"API 请求失败 ({resp.status_code}): {resp.text[:200]}"}
+                            return
+                        # 5xx — 可重试
+                        log.warning("Stream server error %s (attempt %d/%d)", resp.status_code, attempt + 1, _MAX_RETRIES + 1)
+                        last_err = RuntimeError(f"API 请求失败 ({resp.status_code})")
+                        if attempt < _MAX_RETRIES:
+                            time.sleep(_RETRY_BACKOFF ** (attempt + 1))
+                            continue
+                        yield {"type": "error", "message": str(last_err)}
+                        return
 
-            for line in resp.iter_lines():
-                if not line or not line.startswith("data: "):
+                    # 连接成功，开始推流
+                    for line in resp.iter_lines():
+                        if not line or not line.startswith("data: "):
+                            continue
+                        data_str = line[6:]
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            event = json.loads(data_str)
+                            yield self._parse_stream_event(event)
+                        except json.JSONDecodeError:
+                            log.debug("Stream JSON decode error: %s", data_str[:100])
+                            continue
+                    return  # 正常结束
+            except (httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError) as e:
+                log.warning("Stream network error (attempt %d/%d): %s", attempt + 1, _MAX_RETRIES + 1, e)
+                last_err = e
+                if attempt < _MAX_RETRIES:
+                    time.sleep(_RETRY_BACKOFF ** (attempt + 1))
                     continue
-                data_str = line[6:]
-                if data_str == "[DONE]":
-                    break
-                try:
-                    event = json.loads(data_str)
-                    yield self._parse_stream_event(event)
-                except json.JSONDecodeError:
-                    continue
+        yield {"type": "error", "message": f"连接失败: {last_err}"}
 
     def _parse_stream_event(self, event: dict) -> dict:
         t = event.get("type", "")
