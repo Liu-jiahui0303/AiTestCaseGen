@@ -41,7 +41,9 @@
   .workspace{display:flex;height:calc(100vh - 28px);}
   .sidebar{width:280px;min-width:280px;background:var(--panel-bg);border-right:1px solid var(--sidebar-border);display:flex;flex-direction:column;overflow-y:auto;}
   .main-content{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
-  .right-panel{width:240px;min-width:240px;background:var(--panel-bg);border-left:1px solid var(--sidebar-border);display:flex;flex-direction:column;overflow-y:auto;font-size:11px;}
+  .right-panel{width:240px;background:var(--panel-bg);border-left:1px solid var(--sidebar-border);display:flex;flex-direction:column;overflow-y:auto;font-size:11px;}
+  .resize-handle{width:4px;background:transparent;cursor:col-resize;user-select:none;transition:background .15s;flex-shrink:0;}
+  .resize-handle:hover,.resize-handle.active{background:var(--accent);}
   .rp-section{border-bottom:1px solid var(--section-border);}
   .rp-section-header{height:24px;background:var(--panel-header);padding:0 10px;display:flex;align-items:center;font-size:10.5px;font-weight:600;color:var(--section-header-text);text-transform:uppercase;letter-spacing:.4px;}
   .rp-tree{padding:2px 0;max-height:300px;overflow-y:auto;}

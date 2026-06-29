@@ -383,6 +383,29 @@ function flog(level,msg){
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function escHtml(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+// ── 右侧面板拖拽缩放 ──
+(function(){
+  const rp=document.getElementById('rightPanel'),handle=document.getElementById('rpResizeHandle');
+  if(!rp||!handle)return;
+  const MIN=140,MAX=500;
+  let saved=parseInt(localStorage.getItem('tcgen_rp_width'));
+  if(saved&&saved>=MIN&&saved<=MAX)rp.style.width=saved+'px';
+  let dragging=false,startX=0,startW=0;
+  handle.addEventListener('mousedown',function(e){
+    e.preventDefault();dragging=true;startX=e.clientX;startW=rp.offsetWidth;
+    handle.classList.add('active');document.body.style.cursor='col-resize';document.body.style.userSelect='none';
+  });
+  document.addEventListener('mousemove',function(e){
+    if(!dragging)return;const w=Math.min(MAX,Math.max(MIN,startW+startX-e.clientX));
+    rp.style.width=w+'px';
+  });
+  document.addEventListener('mouseup',function(){
+    if(!dragging)return;dragging=false;handle.classList.remove('active');
+    document.body.style.cursor='';document.body.style.userSelect='';
+    localStorage.setItem('tcgen_rp_width',rp.offsetWidth);
+  });
+})();
+
 (async function init(){
   loadSessions();renderSessionTabs();
   await fetchPrompts();applyConfig();
