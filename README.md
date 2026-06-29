@@ -56,7 +56,7 @@
 
 ```bash
 # 1. 克隆 & 安装
-git clone <repo-url> && cd AiTestCaseGen
+git clone https://gitee.com/liu-jiahui007/ai-test-case-gen && cd AiTestCaseGen
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
