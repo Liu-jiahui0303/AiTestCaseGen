@@ -22,3 +22,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Playwright MCP artifacts
+.playwright-mcp/
+snapshot*.yml

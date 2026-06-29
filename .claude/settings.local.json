@@ -11,7 +11,20 @@
       "Bash(curl -s -w '\\\\nHTTP: %{http_code}' -X POST http://127.0.0.1:5000/api/generate -H 'Content-Type: application/json' -d '{\"prd\":\"test prd\",\"api_key\":\"sk-test\"}')",
       "Bash(curl -s -w '\\\\nHTTP_STATUS: %{http_code}' -X POST http://127.0.0.1:5000/api/generate/stream -H 'Content-Type: application/json' -d @E:/Python_project/AiTestCaseGen/large_body.json)",
       "Bash(pkill -f \"python app.py\")",
-      "Bash(node --check static/app.js)"
+      "Bash(node --check static/app.js)",
+      "Bash(curl *)",
+      "WebSearch",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_drag",
+      "mcp__playwright__browser_run_code_unsafe",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_hover",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_fill_form",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_type"
     ]
   }
 }

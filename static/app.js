@@ -99,9 +99,9 @@ let sessions=[{id:'s1',name:'会话 1',messages:[],testCases:[]}],activeSessionI
 function loadSessions(){try{const s=localStorage.getItem(STORE_KEY);if(s){const d=JSON.parse(s);if(d.length){sessions=d;const aid=localStorage.getItem('tcgen_active_sid');if(aid&&sessions.find(s=>s.id===aid))activeSessionId=aid;else activeSessionId=sessions[0].id;}}}catch(e){console.error('loadSessions:',e);}}
 function saveSessions(){localStorage.setItem(STORE_KEY,JSON.stringify(sessions.map(s=>{const{_streamHTML,...r}=s;return r;})));localStorage.setItem('tcgen_active_sid',activeSessionId);}
 function getSession(){return sessions.find(s=>s.id===activeSessionId)||sessions[0];}
-function switchSession(sid){
-  // 同会话不处理
-  if(sid===activeSessionId)return;
+function switchSession(sid, force){
+  // 同会话不处理（除非强制刷新）
+  if(!force && sid===activeSessionId)return;
   // 保存当前会话的流式区域内容
   const cur=getSession();if(cur)cur._streamHTML=document.getElementById('streamArea').innerHTML;
   activeSessionId=sid;const s=getSession();saveSessions();
@@ -131,9 +131,10 @@ function renameSession(sid,name){
 }
 function closeSession(sid){
   if(sessions.length<=1)return;
+  const cur=getSession();if(cur)cur._streamHTML=document.getElementById('streamArea').innerHTML;
   sessions=sessions.filter(s=>s.id!==sid);
   if(activeSessionId===sid)activeSessionId=sessions[0].id;
-  saveSessions();renderSessionTabs();switchSession(activeSessionId);
+  saveSessions();renderSessionTabs();switchSession(activeSessionId, true);
 }
 function renderSessionTabs(){
   const bar=document.getElementById('sessionTabs');

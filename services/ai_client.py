@@ -48,7 +48,9 @@ class AIClient:
                 if resp.is_success:
                     data = resp.json()
                     blocks = data.get("content", [])
-                    return self._parse_blocks(blocks)
+                    result = self._parse_blocks(blocks)
+                    result["usage"] = data.get("usage", {})
+                    return result
                 # 4xx 不重试
                 if 400 <= resp.status_code < 500:
                     log.error("API client error %s: %s", resp.status_code, resp.text[:500])
