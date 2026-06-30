@@ -16,10 +16,12 @@
 
 <table>
 <tr>
+  <td><b>桌面版原生窗口</b></td>
   <td><b>流式生成 & 多轮对话</b></td>
   <td><b>Excel 导出效果</b></td>
 </tr>
 <tr>
+  <td><img src="image/windows-1.png" width="100%"></td>
   <td><img src="image/1.png" width="100%"></td>
   <td><img src="image/excel用例.png" width="100%"></td>
 </tr>
