@@ -29,3 +29,6 @@ snapshot*.yml
 
 # Test reports
 UI_TEST_REPORT.md
+
+# UI test credentials
+.ui-test-config.json
