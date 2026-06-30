@@ -310,6 +310,16 @@ function showEmpty(){document.getElementById('emptyState').style.display='flex';
 
 async function exportExcel(){
   const s=getSession();if(!s.testCases.length)return toast('无可用例','error');
+  // pywebview 桌面模式：走原生保存对话框
+  if(window.pywebview&&window.pywebview.api){
+    try{
+      const r=await window.pywebview.api.save_excel(JSON.stringify(s.testCases));
+      if(r==='ok')toast('已下载');
+      else if(r!=='cancel')toast('导出失败: '+r,'error');
+    }catch(e){console.error('exportExcel:',e);toast('失败: '+e.message,'error');}
+    return;
+  }
+  // 浏览器模式：blob 下载
   try{
     const r=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({test_cases:s.testCases})});
     if(!r.ok){const d=await r.json();return toast(d.error||'失败','error');}

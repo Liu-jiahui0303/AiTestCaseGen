@@ -41,3 +41,9 @@ build/
 dist/
 *.pyc
 *.pyo
+
+# WebView 持久化数据（exe 同目录）
+webview_data/
+
+# 提示词运行时数据（默认值在 testcase_prompt.py 的 _DEFAULTS 中）
+prompts/builtin_prompts.json

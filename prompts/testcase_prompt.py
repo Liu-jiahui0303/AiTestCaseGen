@@ -2,8 +2,14 @@
 
 import json
 import os
+import sys
 
-_JSON_PATH = os.path.join(os.path.dirname(__file__), "builtin_prompts.json")
+# 打包后存 exe 同目录；开发时存 prompts/ 目录
+if getattr(sys, "frozen", False):
+    _DATA_DIR = os.path.dirname(sys.executable)
+else:
+    _DATA_DIR = os.path.dirname(__file__)
+_JSON_PATH = os.path.join(_DATA_DIR, "builtin_prompts.json")
 
 _DEFAULTS = [
     {

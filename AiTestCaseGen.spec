@@ -14,6 +14,7 @@ a = Analysis(
         (str(_PROJECT_ROOT / "static"), "static"),
         (str(_PROJECT_ROOT / "templates"), "templates"),
         (str(_PROJECT_ROOT / "prompts"), "prompts"),
+        (str(_PROJECT_ROOT / "image"), "image"),
     ],
     hiddenimports=[
         "flask",
@@ -59,5 +60,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon=str(_PROJECT_ROOT / "image" / "tangtang.ico"),
 )
