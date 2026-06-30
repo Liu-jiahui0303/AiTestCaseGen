@@ -32,3 +32,12 @@ UI_TEST_REPORT.md
 
 # UI test credentials
 .ui-test-config.json
+
+# Claude Code local settings (session-scoped, not project code)
+.claude/settings.local.json
+
+# PyInstaller build artifacts
+build/
+dist/
+*.pyc
+*.pyo

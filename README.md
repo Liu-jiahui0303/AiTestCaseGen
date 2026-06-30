@@ -56,18 +56,38 @@
 
 ## 快速开始
 
+### 方式一：桌面版（双击即用，原生窗口）
+
+1. 下载 [Releases](https://gitee.com/liu-jiahui007/ai-test-case-gen/releases) 中的 `AiTestCaseGen.exe`
+2. 双击启动 → 弹出原生桌面窗口
+3. 左侧填入 API Key → 保存 → 开始使用
+
+### 方式二：源码运行（开发者）
+
 ```bash
 # 1. 克隆 & 安装
 git clone https://gitee.com/liu-jiahui007/ai-test-case-gen && cd AiTestCaseGen
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# 2. 启动
+# 2. 启动 Web 版
 python app.py
 # → 浏览器打开 http://127.0.0.1:5000
 
-# 3. 配置 API
+# 3. 启动桌面版
+python desktop.py
+# → 原生窗口打开
+
+# 4. 配置 API
 # 左侧面板填入 Base URL / Model / API Key → 保存
+```
+
+### 方式三：自行打包 exe
+
+```bash
+pip install pywebview pyinstaller
+pyinstaller AiTestCaseGen.spec
+# → dist/AiTestCaseGen.exe
 ```
 
 ---
@@ -76,17 +96,19 @@ python app.py
 
 ```
 AiTestCaseGen/
-├── app.py                      # 入口
+├── app.py                      # Web 版入口
+├── desktop.py                  # 桌面版入口（pywebview 原生窗口）
+├── AiTestCaseGen.spec          # PyInstaller 打包配置
 ├── requirements.txt
 ├── config/settings.py          # 默认配置
 ├── prompts/
 │   ├── testcase_prompt.py      # 提示词定义
 │   └── builtin_prompts.json    # 提示词数据（页面编辑自动同步）
 ├── services/
-│   ├── ai_client.py            # API 客户端（流式 + 非流式 + 思考模式）
+│   ├── ai_client.py            # API 客户端（流式 + 非流式 + 思考模式 + 重试）
 │   └── excel_builder.py        # Excel 生成
 ├── routes/
-│   ├── api.py                  # /api/* 全部接口
+│   ├── api.py                  # /api/* 全部接口（含速率限制）
 │   └── pages.py                # 页面路由
 ├── utils/
 │   ├── logger.py               # 日志（控制台 + 文件）
