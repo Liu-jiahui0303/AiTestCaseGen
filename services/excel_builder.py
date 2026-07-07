@@ -4,6 +4,7 @@ import logging
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 from config.settings import EXCEL_HEADERS, EXCEL_COL_WIDTHS, PRIORITY_FILLS
 
@@ -41,24 +42,37 @@ def _write_sheet(ws, cases: list):
         cell.alignment = _CENTER_ALIGN
         cell.border = _THIN_BORDER
 
-    # 数据行
+    # 数据行（col 1=执行状态, col 2-9=字段）
     for row_idx, tc in enumerate(cases, 2):
+        # 执行状态
+        cell = ws.cell(row=row_idx, column=1, value="未执行")
+        cell.font = _BODY_FONT
+        cell.border = _THIN_BORDER
+        cell.alignment = _CENTER_ALIGN
+
         values = [tc.get(k, "") for k in _FIELD_KEYS]
         fc = PRIORITY_FILLS.get(tc.get("priority", ""))
         row_fill = PatternFill(start_color=fc[0], end_color=fc[1], fill_type="solid") if fc else None
 
-        for col_idx, value in enumerate(values, 1):
+        for col_idx, value in enumerate(values, 2):
             cell = ws.cell(row=row_idx, column=col_idx, value=value)
             cell.font = _BODY_FONT
             cell.border = _THIN_BORDER
-            cell.alignment = _CENTER_ALIGN if col_idx in (1, 7, 8) else _WRAP_ALIGN
+            cell.alignment = _CENTER_ALIGN if col_idx in (2, 8, 9) else _WRAP_ALIGN
             if row_fill:
                 cell.fill = row_fill
+
+    # 执行状态列：数据验证下拉
+    dv = DataValidation(type="list", formula1='"未执行,通过,失败,阻塞,跳过"', allow_blank=True)
+    dv.error = "请选择有效状态"
+    dv.errorTitle = "无效输入"
+    ws.add_data_validation(dv)
+    dv.add(f"A2:A{len(cases) + 1}")
 
     # 列宽 / 冻结 / 筛选
     for i, w in enumerate(EXCEL_COL_WIDTHS, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
-    ws.freeze_panes = "A2"
+    ws.freeze_panes = "B2"
     ws.auto_filter.ref = f"A1:{get_column_letter(len(EXCEL_HEADERS))}{len(cases) + 1}"
 
 
