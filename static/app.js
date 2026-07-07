@@ -342,16 +342,68 @@ function buildRightPanel(cases){
   Object.entries(bp).forEach(([k,v])=>{st+=`<span style="margin-right:6px;">${k}优先级 <b>${v}</b></span>`;});
   document.getElementById('rpStats').innerHTML=st;
 
-  // 目录树：按模块分组
+  // 目录树：按模块分组，每个节点加复选框
   const byModule={};cases.forEach((tc,i)=>{const m=tc.module||'未分类';if(!byModule[m])byModule[m]=[];byModule[m].push({...tc,_idx:i});});
   const tree=document.getElementById('rpTree');
-  tree.innerHTML=Object.entries(byModule).map(([mod,list])=>`<div class="rp-module" onclick="toggleModule(this)"><span class="arrow">▶</span> ${escHtml(mod)} (${list.length})</div>${list.map(c=>`<div class="rp-case" style="display:none;" onclick="selectCase(${c._idx})" data-idx="${c._idx}">${escHtml(c.title)}</div>`).join('')}`).join('');
+  tree.innerHTML=Object.entries(byModule).map(([mod,list])=>
+    `<div class="rp-module" onclick="toggleModule(this)"><input type="checkbox" class="rp-check" onclick="event.stopPropagation();toggleModuleCheck(this)" data-module="${escHtml(mod)}"><span class="arrow">▶</span> ${escHtml(mod)} (${list.length})</div>`+
+    list.map(c=>`<div class="rp-case" style="display:none;" onclick="selectCase(${c._idx})" data-idx="${c._idx}" data-module="${escHtml(mod)}"><input type="checkbox" class="rp-check" onclick="event.stopPropagation();onCaseCheck(this)" data-idx="${c._idx}">${escHtml(c.title)}</div>`).join('')
+  ).join('');
+  document.getElementById('rpDelBtn').style.display='none';
 }
 
 function toggleModule(el){
   el.classList.toggle('open');
   let sib=el.nextElementSibling;
-  while(sib&&sib.classList.contains('rp-case')){sib.style.display=el.classList.contains('open')?'block':'none';sib=sib.nextElementSibling;}
+  while(sib&&sib.classList.contains('rp-case')){sib.style.display=el.classList.contains('open')?'flex':'none';sib=sib.nextElementSibling;}
+}
+
+function toggleModuleCheck(cb){
+  const mod=cb.dataset.module,checked=cb.checked;
+  document.querySelectorAll('.rp-case').forEach(e=>{
+    if(e.dataset.module===mod){e.querySelector('.rp-check').checked=checked;e.style.background=checked?'var(--btn-hover)':'';}
+  });
+  document.getElementById('rpDelBtn').style.display=getCheckedCases().length?'':'none';
+}
+
+function onCaseCheck(cb){
+  const idx=parseInt(cb.dataset.idx),mod=cb.closest('.rp-case').dataset.module;
+  cb.closest('.rp-case').style.background=cb.checked?'var(--btn-hover)':'';
+  // 更新模块复选框状态
+  const cases=document.querySelectorAll(`.rp-case[data-module="${CSS.escape(mod)}"]`);
+  let all=0,chk=0;
+  cases.forEach(e=>{all++;if(e.querySelector('.rp-check').checked)chk++;});
+  const mcb=document.querySelector(`.rp-check[data-module="${CSS.escape(mod)}"]`);
+  if(mcb){mcb.checked=chk===all;mcb.indeterminate=chk>0&&chk<all;}
+  document.getElementById('rpDelBtn').style.display=getCheckedCases().length?'':'none';
+}
+
+function getCheckedCases(){
+  const ids=new Set();
+  // 模块级选中：该模块下全部用例
+  document.querySelectorAll('.rp-check[data-module]').forEach(cb=>{
+    if(cb.checked&&!cb.dataset.idx){
+      const mod=cb.dataset.module;
+      document.querySelectorAll(`.rp-case[data-module="${CSS.escape(mod)}"]`).forEach(e=>ids.add(parseInt(e.dataset.idx)));
+    }
+  });
+  // 单个用例选中
+  document.querySelectorAll('.rp-check[data-idx]').forEach(cb=>{if(cb.checked)ids.add(parseInt(cb.dataset.idx));});
+  return [...ids];
+}
+
+function deleteSelectedCases(){
+  const ids=getCheckedCases();
+  if(!ids.length)return toast('请先勾选用例','error');
+  if(!confirm(`确定删除 ${ids.length} 条用例吗？此操作不可撤销。`))return;
+  const s=getSession();if(!s)return;
+  // 保留未被删除的用例
+  s.testCases=s.testCases.filter((_,i)=>!ids.includes(i));
+  saveSessions();
+  renderTable(s.testCases);renderStats(s.testCases,null);
+  buildRightPanel(s.testCases);
+  if(!s.testCases.length){hideResult();showEmpty();}
+  toast(`已删除 ${ids.length} 条用例`);
 }
 
 function selectCase(idx){
@@ -366,7 +418,7 @@ function selectCase(idx){
       if(mod&&!mod.classList.contains('open'))mod.classList.add('open');
       // 展开所有同级 case
       let sib=mod?mod.nextElementSibling:null;
-      while(sib&&sib.classList.contains('rp-case')){sib.style.display='block';sib=sib.nextElementSibling;}
+      while(sib&&sib.classList.contains('rp-case')){sib.style.display='flex';sib=sib.nextElementSibling;}
       e.scrollIntoView({behavior:'smooth',block:'nearest'});
     }
   });
