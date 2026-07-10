@@ -16,13 +16,11 @@
 
 <table>
 <tr>
-  <td><b>桌面版原生窗口</b></td>
   <td><b>流式生成 & 多轮对话</b></td>
   <td><b>Excel 导出效果</b></td>
 </tr>
 <tr>
-  <td><img src="image/windows-1.png" width="100%"></td>
-  <td><img src="image/1.png" width="100%"></td>
+  <td><img src="image/windows.png" width="100%"></td>
   <td><img src="image/excel用例.png" width="100%"></td>
 </tr>
 </table>
@@ -44,17 +42,12 @@
 | 🧠 **AI 驱动** | DeepSeek V4 Pro 模型 + 思考模式，覆盖功能/边界/异常/安全多维测试 |
 | ⚡ **流式输出** | SSE 实时推流，思考过程与生成内容同步展示，支持随时终止 |
 | 💬 **多轮对话** | 生成后可追加需求（"再补 5 条性能用例"），完整上下文保留 |
-| 📑 **多会话** | 标签式管理，同时处理多个 PRD，互不干扰 |
+| 📑 **多会话** | 标签式管理，同时处理多个 PRD，互不干扰；生成中禁止切换防止内容丢失 |
+| 🧠 **知识库** | 自动积累历史用例，生成时检索相似 PRD 并注入参考范例；同会话去重合并 |
+| 🔍 **手动去重** | 一键分析知识库重复记录，包含匹配展示重复/新增标题，确认后合并删除 |
 | 📝 **提示词管理** | 内置 3 套策略，支持在线编辑/新增，自动持久化 |
 | 📥 **Excel 导出** | 表头蓝底白字、优先级行着色（红/橙/绿）、冻结首行、自动筛选 |
-| 🌓 **双主题** | 亮色/暗色一键切换，偏好自动保存 |
-| 📋 **快速模板** | 内置登录/购物车/用户管理/订单管理 4 套示例 PRD，新用户即刻体验 |
 | 📂 **用例目录** | 右侧面板按模块分组树形目录，点击定位详情，表格联动高亮 |
-| ↔️ **面板缩放** | 右侧面板宽度可拖拽调整（140~500px），偏好自动记忆 |
-| 🛑 **随时终止** | 生成过程中一键停止，已输出的内容保留不丢失 |
-| 🛡️ **健壮性** | API 自动重试（5xx+网络错误，指数退避）、流式超时保护、速率限制 |
-
----
 
 ## 快速开始
 
@@ -108,7 +101,8 @@ AiTestCaseGen/
 │   └── builtin_prompts.json    # 提示词数据（页面编辑自动同步）
 ├── services/
 │   ├── ai_client.py            # API 客户端（流式 + 非流式 + 思考模式 + 重试）
-│   └── excel_builder.py        # Excel 生成
+│   ├── excel_builder.py        # Excel 生成
+│   └── memory_store.py         # 知识库（SQLite 存储 + 关键词检索 + 去重）
 ├── routes/
 │   ├── api.py                  # /api/* 全部接口（含速率限制）
 │   └── pages.py                # 页面路由
@@ -136,27 +130,5 @@ AiTestCaseGen/
 | `GET /api/prompts` | 获取提示词列表 |
 | `POST /api/prompts` | 保存提示词 |
 | `POST /api/export` | 导出 Excel |
+| `GET/POST/PUT/DELETE /api/knowledge/*` | 知识库 CRUD、检索、去重预览/执行 |
 | `POST /api/log` | 前端日志上报 |
-
----
-
-## 配置
-
-`config/settings.py`：
-
-```python
-DEFAULT_BASE_URL = "https://api.deepseek.com/anthropic"
-DEFAULT_MODEL    = "deepseek-v4-pro[1M]"
-MAX_TOKENS       = 65536
-API_TIMEOUT      = 180
-```
-
-安全限制（`routes/api.py`）：
-
-| 限制项 | 值 |
-|--------|-----|
-| 请求体上限 | 200KB |
-| 生成类接口速率 | 10 req/min/IP |
-| 其他接口速率 | 60 req/min/IP |
-| API 重试次数 | 3 次（指数退避） |
-| 流式读取超时 | 300 秒 |

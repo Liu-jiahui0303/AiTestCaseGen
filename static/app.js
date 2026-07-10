@@ -102,6 +102,7 @@ function getSession(){return sessions.find(s=>s.id===activeSessionId)||sessions[
 function switchSession(sid, force){
   // 同会话不处理（除非强制刷新）
   if(!force && sid===activeSessionId)return;
+  if(!force && currentStreamAbort){toast('请等待生成完成或手动停止后再切换会话','error');return;}
   // 保存当前会话的流式区域内容
   const cur=getSession();if(cur)cur._streamHTML=document.getElementById('streamArea').innerHTML;
   activeSessionId=sid;const s=getSession();saveSessions();
@@ -122,6 +123,7 @@ function switchSession(sid, force){
   }
 }
 function addSession(){
+  if(currentStreamAbort){toast('请等待生成完成或手动停止后再新增会话','error');return;}
   const id='s'+Date.now(),n='会话 '+(sessions.length+1);
   sessions.push({id,name:n,messages:[],testCases:[]});
   saveSessions();renderSessionTabs();switchSession(id);
@@ -144,7 +146,7 @@ function renderSessionTabs(){
 }
 
 // ── 生成（流式） ──
-let currentStreamAbort=null,fullText='',fullThinking='',contentBlockType='';
+let currentStreamAbort=null,fullText='',fullThinking='',kbMatchCount=-1,contentBlockType='';
 async function generate(){
   const prd=document.getElementById('prdInput').value.trim();
   const cfg=loadConfig();const ak=cfg.apiKey||'',bu=cfg.baseUrl||'https://api.deepseek.com/anthropic',md=cfg.model||'deepseek-v4-pro[1M]';
@@ -168,16 +170,20 @@ async function generate(){
   }
   const block=document.createElement('div');
   area.appendChild(block);
+  // 知识库引用 badge —— 独立 DOM 元素，不依赖 RAF
+  const badge=document.createElement('div');
+  badge.style.cssText='display:none;font-size:12px;font-weight:600;padding:4px 12px;border-radius:4px;margin-bottom:8px;';
+  area.appendChild(badge);
   area.scrollTop=area.scrollHeight;
-  fullText='';fullThinking='';
+  fullText='';fullThinking='';kbMatchCount=-1;
 
-  let ctrl=null;
+  let ctrl=null,aborted=false;
   try{
     if(currentStreamAbort)currentStreamAbort.abort();
     ctrl=new AbortController();currentStreamAbort=ctrl;
     const resp=await fetch('/api/generate/stream',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({prd,api_key:ak,base_url:bu,model:md,system_prompt:prompt?prompt.system:'',user_template:prompt?prompt.user:'',messages:session.messages.slice(-10)}),
+      body:JSON.stringify({prd,api_key:ak,base_url:bu,model:md,system_prompt:prompt?prompt.system:'',user_template:prompt?prompt.user:'',messages:session.messages.slice(-10),use_knowledge:getKbUseEnabled()}),
       signal:ctrl.signal,
     });
     if(!resp.ok){block.innerHTML='<div style="color:var(--danger)">请求失败: '+resp.status+'</div>';return;}
@@ -190,7 +196,7 @@ async function generate(){
         if(line.startsWith('data: '))try{const ev=JSON.parse(line.substring(6));updateStream(ev,area,block);}catch(e){console.error('SSE parse:',e);}
       }
     }
-  }catch(e){if(e.name!=='AbortError'){console.error('generate:',e);block.innerHTML='<div style="color:var(--danger)">错误: '+escHtml(e.message)+'</div>';}}
+  }catch(e){if(e.name!=='AbortError'){console.error('generate:',e);block.innerHTML='<div style="color:var(--danger)">错误: '+escHtml(e.message)+'</div>';}else{aborted=true;}}
   finally{
     document.getElementById('generateBtn').disabled=false;document.getElementById('generateBtn').textContent='▶ 生成测试用例';
     document.getElementById('stopBtn').style.display='none';if(currentStreamAbort===ctrl)currentStreamAbort=null;
@@ -198,22 +204,81 @@ async function generate(){
     session._streamHTML=document.getElementById('streamArea').innerHTML;
     // 保存到会话历史
     const um=(prompt&&prompt.user?prompt.user:'请根据以下 PRD 文档，生成完整的测试用例：\n\n{prd_text}').replace('{prd_text}',prd);
-    session.messages.push({role:'user',content:um});session.messages.push({role:'assistant',content:fullText});saveSessions();
+    session.messages.push({role:'user',content:um});session.messages.push({role:'assistant',content:fullText});
     if(document.getElementById('chatModal').style.display!=='none')rebuildChatHistory();
-    // 解析 JSON → 表格
-    try{
-      const jsonStr=extractJson(fullText),data=JSON.parse(jsonStr),tc=data.test_cases||[];
+    // 解析 JSON → 表格 (用户手动停止时跳过)
+    if(!aborted){try{
+      const jsonStr=extractJson(fullText);if(!jsonStr||jsonStr.length<10){block.innerHTML=_renderStreamHTML();saveSessions();return;}
+      const data=JSON.parse(jsonStr),tc=data.test_cases||[];
       if(tc.length>0){
-        session.testCases=tc;block.innerHTML+=`<div style="color:var(--accent);font-weight:600;margin-top:8px;">✅ 已生成 ${tc.length} 条测试用例（下方表格）</div>`;
+        session.testCases=tc;saveSessions();block.innerHTML+=`<div style="color:var(--accent);font-weight:600;margin-top:8px;">✅ 已生成 ${tc.length} 条测试用例（下方表格）</div>`;
         document.getElementById('resultCard').style.display='flex';renderTable(tc);renderStats(tc,null);
-      }else{block.innerHTML=_renderStreamHTML();}
-    }catch(e){console.error('JSON parse:',e);block.innerHTML=_renderStreamHTML();}
+        // 存入知识库
+        if(getKbSaveEnabled()){
+          if(prd&&prd.length>4&&session.testCases.length)saveToKnowledgeBase(session,prd);
+        }
+      }else{block.innerHTML=_renderStreamHTML();saveSessions();}
+    }catch(e){console.warn('JSON 解析失败 (AI 输出格式异常，已展示原始结果):',e.message);block.innerHTML=_renderStreamHTML()+'<div style="color:var(--danger);margin-top:6px;">⚠️ AI 返回的 JSON 格式有误，请检查上方原始结果或重试</div>';saveSessions();}}
   }
 }
 
 let _streamRAF=null;
 function updateStream(ev,area,block){
   if(ev.type==='error'){block.innerHTML='<div style="color:var(--danger)">'+escHtml(ev.message||'流式错误')+'</div>';return;}
+  if(ev.type==='knowledge'){
+    kbMatchCount=ev.matched||0;
+    console.log('[KB] 收到知识库事件, matched='+kbMatchCount);
+    const badge=block.nextElementSibling;
+    if(badge){
+      if(kbMatchCount>0){
+        badge.innerHTML='📚 已引用 '+kbMatchCount+' 条历史参考 <span style="font-size:10px;opacity:0.8;">▶</span>';
+        badge.style.cssText='background:#2196F3;color:#fff;font-size:12px;font-weight:600;padding:4px 12px;border-radius:4px;display:inline-block;margin-bottom:8px;cursor:pointer;';
+        badge.title='点击查看引用详情';
+        badge._records=ev.records||[];
+        badge._expanded=false;
+        badge.onclick=function(){
+          const detail=badge.nextElementSibling;
+          if(badge._expanded){
+            if(detail&&detail.classList.contains('kb-detail'))detail.remove();
+            badge.querySelector('span').textContent='▶';
+            badge._expanded=false;
+          }else{
+            let html='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+            html+='<thead><tr style="background:#e0e0e0;">';
+            html+='<th style="padding:4px 8px;border:1px solid #ccc;text-align:left;">编号</th>';
+            html+='<th style="padding:4px 8px;border:1px solid #ccc;text-align:left;">标题</th>';
+            html+='<th style="padding:4px 8px;border:1px solid #ccc;text-align:left;">步骤</th>';
+            html+='<th style="padding:4px 8px;border:1px solid #ccc;text-align:left;">预期结果</th>';
+            html+='</tr></thead><tbody>';
+            for(const rec of badge._records){
+              html+='<tr><td colspan="4" style="padding:4px 8px;background:#f0f4ff;font-weight:600;border:1px solid #ccc;">';
+              html+=escHtml((rec.modules||[]).join(' / '))+' · '+rec.case_count+'条用例 · ID:'+rec.id+'</td></tr>';
+              for(const tc of rec.samples||[]){
+                html+='<tr>';
+                html+='<td style="padding:4px 8px;border:1px solid #ddd;vertical-align:top;"><code>'+escHtml(tc.id)+'</code></td>';
+                html+='<td style="padding:4px 8px;border:1px solid #ddd;vertical-align:top;">'+escHtml(tc.title)+'</td>';
+                html+='<td style="padding:4px 8px;border:1px solid #ddd;vertical-align:top;white-space:pre-wrap;">'+escHtml(tc.steps)+'</td>';
+                html+='<td style="padding:4px 8px;border:1px solid #ddd;vertical-align:top;white-space:pre-wrap;">'+escHtml(tc.expected)+'</td>';
+                html+='</tr>';
+              }
+            }
+            html+='</tbody></table>';
+            const div=document.createElement('div');
+            div.className='kb-detail';
+            div.style.cssText='background:#fff;border:1px solid #ccc;border-radius:4px;padding:8px;margin-bottom:8px;max-height:400px;overflow-y:auto;';
+            div.innerHTML=html;
+            badge.after(div);
+            badge.querySelector('span').textContent='▼';
+            badge._expanded=true;
+          }
+        };
+      }else{
+        badge.textContent='📚 未找到相关历史参考';
+        badge.style.cssText='background:#999;color:#fff;font-size:12px;font-weight:600;padding:4px 12px;border-radius:4px;display:inline-block;margin-bottom:8px;';
+      }
+    }
+    return;
+  }
   if(ev.type==='thinking'){fullThinking+=ev.thinking||'';}
   else if(ev.type==='text'){fullText+=ev.text||'';}
   // 节流：最多 60fps 更新 DOM
@@ -469,7 +534,196 @@ function escHtml(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replac
   });
 })();
 
+// ── 知识库 ──
+function getKbUseEnabled(){return document.getElementById('kbUseToggle').checked;}
+function getKbSaveEnabled(){return document.getElementById('kbSaveToggle').checked;}
+function onKbToggle(){
+  localStorage.setItem('tcgen_kb_use',document.getElementById('kbUseToggle').checked);
+  localStorage.setItem('tcgen_kb_save',document.getElementById('kbSaveToggle').checked);
+}
+async function saveToKnowledgeBase(session,kbPrd){
+  console.log('[KB] saveToKnowledgeBase, _kbRecordId='+session._kbRecordId+', testCases='+session.testCases.length);
+  if(session._kbRecordId){
+    // 已有记录：取回现有用例，标题去重后合并更新
+    console.log('[KB] 走更新路径, recordId='+session._kbRecordId);
+    let updated=false;
+    try{
+      const r=await fetch('/api/knowledge/detail/'+session._kbRecordId);
+      if(r.ok){
+        const d=await r.json();
+        const existingTitles=new Set((d.test_cases||[]).map(tc=>(tc.title||'').trim()).filter(Boolean));
+        const merged=[...(d.test_cases||[])];
+        let added=0;
+        for(const tc of session.testCases){
+          const title=(tc.title||'').trim();
+          if(title&&!existingTitles.has(title)){
+            merged.push(tc);existingTitles.add(title);added++;
+          }
+        }
+        if(added>0){
+          const ur=await fetch('/api/knowledge/'+session._kbRecordId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({prd:kbPrd,test_cases:merged})});
+          if(ur.ok){fetchKbStats();console.log('kb updated: +'+added+' cases, total='+merged.length);updated=true;}
+        }else{updated=true;} // 无新用例，也算成功
+      }else{
+        // 记录已被手动删除，清除 ID 降级为新建
+        session._kbRecordId=null;saveSessions();
+      }
+    }catch(e){console.error('kb update:',e);session._kbRecordId=null;saveSessions();}
+    if(updated)return;
+  }
+  // 首次存入 / 更新失败降级：POST 新建
+  console.log('[KB] 走新建路径');
+  try{
+    const r=await fetch('/api/knowledge/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prd:kbPrd,test_cases:session.testCases})});
+    if(r.ok){const d=await r.json();session._kbRecordId=d.id;console.log('[KB] 新建成功, 新ID='+d.id);saveSessions();fetchKbStats();}
+    else{console.error('[KB] 新建失败: '+r.status);}
+  }catch(e){console.error('kb save:',e);}
+}
+async function fetchKbStats(){
+  try{const r=await fetch('/api/knowledge/stats');const d=await r.json();
+    document.getElementById('kbStat').textContent='已积累 '+d.count+' 份参考';}catch(e){}
+}
+async function openKbBrowser(){
+  document.getElementById('kbModal').style.display='';
+  try{const r=await fetch('/api/knowledge/list');const d=await r.json();
+    document.getElementById('kbModalCount').textContent=d.total+' 条记录';
+    const list=document.getElementById('kbList');
+    if(!d.items.length){list.innerHTML='<div style=\"text-align:center;color:var(--empty-color);padding:30px 0;font-size:12px;\">暂无历史记录</div>';return;}
+    list.innerHTML=d.items.map(i=>{
+      const mods=(i.modules||[]).join(' / ')||'未知模块';
+      return '<div class=\"kb-row\" style=\"border-bottom:1px solid var(--section-border);padding:8px 0;display:flex;align-items:flex-start;gap:10px;cursor:pointer;\" onclick=\"toggleKbDetail(event,'+i.id+')\"><div style=\"flex:1;min-width:0;\"><div style=\"font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\" title=\"'+escHtml(i.prd_summary||'')+'\">'+escHtml(i.prd_summary||'').substring(0,50)+'</div><div style=\"font-size:10px;color:var(--text-dim);margin-top:2px;\">'+escHtml(mods)+' · '+i.case_count+'条用例 · '+i.created_at+'</div></div><button class=\"btn btn-sm btn-danger\" onclick=\"event.stopPropagation();deleteFromKb('+i.id+')\" style=\"flex-shrink:0;\">🗑</button><div class=\"kb-detail-panel\" style=\"display:none;\"></div></div>';
+    }).join('');
+  }catch(e){console.error('kb list:',e);}
+}
+async function toggleKbDetail(event,id){
+  event.stopPropagation();
+  const row=event.currentTarget;
+  const panel=row.querySelector('.kb-detail-panel');
+  if(panel.style.display==='block'){panel.style.display='none';return;}
+  // 已有内容则直接展开
+  if(panel._loaded){panel.style.display='block';return;}
+  // 首次加载
+  panel.innerHTML='<div style=\"text-align:center;padding:12px 0;color:var(--text-dim);\">加载中...</div>';
+  panel.style.display='block';
+  try{
+    const r=await fetch('/api/knowledge/detail/'+id);
+    if(!r.ok){panel.innerHTML='<div style=\"color:var(--danger);\">加载失败</div>';return;}
+    const d=await r.json();
+    const tcs=d.test_cases||[];
+    if(!tcs.length){panel.innerHTML='<div style=\"color:var(--text-dim);text-align:center;padding:8px 0;\">无用例数据</div>';return;}
+    let html='<table style=\"width:100%;border-collapse:collapse;font-size:11px;margin-top:6px;\">';
+    html+='<thead><tr style=\"background:#e8e8e8;\">';
+    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">编号</th>';
+    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">标题</th>';
+    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">步骤</th>';
+    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">预期结果</th>';
+    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">类型</th>';
+    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">优先级</th>';
+    html+='</tr></thead><tbody>';
+    for(const tc of tcs){
+      html+='<tr>';
+      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;\"><code>'+escHtml(tc.id)+'</code></td>';
+      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;\">'+escHtml(tc.title)+'</td>';
+      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;white-space:pre-wrap;\">'+escHtml(tc.steps)+'</td>';
+      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;white-space:pre-wrap;\">'+escHtml(tc.expected)+'</td>';
+      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;\">'+escHtml(tc.type)+'</td>';
+      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;\">'+escHtml(tc.priority)+'</td>';
+      html+='</tr>';
+    }
+    html+='</tbody></table>';
+    panel.innerHTML=html;
+    panel._loaded=true;
+  }catch(e){console.error('kb detail:',e);panel.innerHTML='<div style=\"color:var(--danger);\">加载失败</div>';}
+}
+function closeKbModal(){document.getElementById('kbModal').style.display='none';}
+async function deleteFromKb(id){
+  if(!confirm('删除这条知识库记录？'))return;
+  try{await fetch('/api/knowledge/'+id,{method:'DELETE'});openKbBrowser();fetchKbStats();toast('已删除');}catch(e){toast('删除失败','error');}
+}
+async function clearKnowledge(){
+  if(!confirm('确定清空全部知识库记录？此操作不可撤销。'))return;
+  try{await fetch('/api/knowledge/clear',{method:'DELETE'});openKbBrowser();fetchKbStats();toast('已清空');}catch(e){toast('清空失败','error');}
+}
+
+let _dedupGroups=null;
+async function openDedupPreview(){
+  document.getElementById('dedupModal').style.display='';
+  document.getElementById('dedupLoading').style.display='';
+  document.getElementById('dedupResult').style.display='none';
+  document.getElementById('dedupFooter').style.display='none';
+  _dedupGroups=null;
+  try{
+    const r=await fetch('/api/knowledge/dedup/preview',{method:'POST'});
+    const d=await r.json();
+    document.getElementById('dedupLoading').style.display='none';
+    if(!d.groups||!d.groups.length){
+      document.getElementById('dedupResult').style.display='';
+      document.getElementById('dedupResult').innerHTML='<div style="text-align:center;padding:30px 0;color:var(--text-dim);font-size:13px;">✅ 未发现重复记录，无需去重</div>';
+      document.getElementById('dedupFooter').style.display='flex';
+      document.getElementById('dedupSummary').textContent='';
+      document.getElementById('dedupExecBtn').style.display='none';
+      return;
+    }
+    _dedupGroups=d.groups;
+    let html='';
+    html+='<div style="margin-bottom:12px;font-size:12px;color:var(--text-dim);">共检测到 <b style="color:var(--danger);">'+d.groups.length+'</b> 组重复，涉及 <b>'+d.total_delete+'</b> 条可合并记录</div>';
+    d.groups.forEach((g,i)=>{
+      html+='<div style="border:1px solid #ddd;border-radius:6px;padding:12px 14px;margin-bottom:12px;background:#fafafa;">';
+      html+='<div style="font-weight:600;font-size:13px;margin-bottom:8px;">📦 组 '+(i+1)+'：<span style="color:var(--accent);">'+escHtml(g.module)+'</span></div>';
+      // 保留记录
+      html+='<div style="background:#e8f5e9;border-left:3px solid #4caf50;border-radius:4px;padding:8px 10px;margin-bottom:6px;">';
+      html+='<div style="font-weight:600;font-size:12px;margin-bottom:4px;">✅ 保留记录 ID '+g.keep_id+'（'+g.keep_count+'条用例）</div>';
+      html+='<div style="font-size:11px;color:#555;">'+(g.keep_titles||[]).map(t=>'· '+escHtml(t)).join('<br>')+'</div>';
+      html+='</div>';
+      // 合并来源
+      for(let j=0;j<g.merge_items.length;j++){
+        const m=g.merge_items[j];
+        html+='<div style="background:#fff3e0;border-left:3px solid #ff9800;border-radius:4px;padding:8px 10px;margin-bottom:4px;">';
+        html+='<div style="font-weight:600;font-size:12px;margin-bottom:4px;">📋 合并 ID '+m.id+'（'+m.count+'条用例）</div>';
+        if(m.overlap&&m.overlap.length){
+          html+='<div style="font-size:11px;color:#999;margin-bottom:3px;">重复标题：'+(m.overlap).map(t=>escHtml(t)).join('、')+'</div>';
+        }
+        html+='<div style="font-size:11px;color:#555;">'+(m.titles||[]).map(t=>'· '+escHtml(t)).join('<br>')+'</div>';
+        html+='</div>';
+      }
+      // 汇总
+      html+='<div style="margin-top:6px;font-size:11px;color:#666;line-height:1.6;">';
+      if(g.keep_only&&g.keep_only.length)html+='<span style="color:#4caf50;">保留独有：'+g.keep_only.map(t=>escHtml(t)).join('、')+'</span><br>';
+      if(g.new_only&&g.new_only.length)html+='<span style="color:var(--accent);">合并新增：'+g.new_only.map(t=>escHtml(t)).join('、')+'</span><br>';
+      html+='→ 去重后预计 <b style="color:var(--accent);">'+g.final_count+'</b> 条唯一用例';
+      html+='</div>';
+      html+='</div>';
+    });
+    document.getElementById('dedupResult').innerHTML=html;
+    document.getElementById('dedupResult').style.display='';
+    document.getElementById('dedupFooter').style.display='flex';
+    document.getElementById('dedupSummary').textContent='将删除 '+d.total_delete+' 条重复记录，合并后保留 '+d.groups.length+' 条';
+    document.getElementById('dedupExecBtn').style.display='';
+  }catch(e){
+    console.error('dedup preview:',e);
+    document.getElementById('dedupLoading').style.display='none';
+    document.getElementById('dedupResult').style.display='';
+    document.getElementById('dedupResult').innerHTML='<div style="text-align:center;padding:30px 0;color:var(--danger);">分析失败: '+escHtml(e.message)+'</div>';
+  }
+}
+function closeDedupModal(){document.getElementById('dedupModal').style.display='none';_dedupGroups=null;}
+async function executeDedup(){
+  if(!_dedupGroups||!_dedupGroups.length)return;
+  const btn=document.getElementById('dedupExecBtn');
+  btn.disabled=true;btn.textContent='执行中...';
+  try{
+    const r=await fetch('/api/knowledge/dedup/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({groups:_dedupGroups})});
+    const d=await r.json();
+    toast('去重完成：删除 '+d.deleted+' 条，更新 '+d.updated+' 条');
+    closeDedupModal();
+    openKbBrowser();fetchKbStats();
+  }catch(e){toast('去重失败: '+e.message,'error');btn.disabled=false;btn.textContent='确认去重';}
+}
+
 (async function init(){
   loadSessions();renderSessionTabs();
   await fetchPrompts();applyConfig();
+  fetchKbStats();
+  document.getElementById('kbUseToggle').checked=localStorage.getItem('tcgen_kb_use')==='true';
+  document.getElementById('kbSaveToggle').checked=localStorage.getItem('tcgen_kb_save')==='true';
 })();

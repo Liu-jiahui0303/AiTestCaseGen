@@ -44,7 +44,7 @@ class AIClient:
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 log.info("Call %s model=%s msgs=%d (attempt %d)", api_url, self._model, len(messages), attempt + 1)
-                resp = httpx.post(api_url, headers=headers, json=body, timeout=_API_TIMEOUT)
+                resp = httpx.post(api_url, headers=headers, json=body, timeout=_API_TIMEOUT, verify=False)
                 if resp.is_success:
                     data = resp.json()
                     blocks = data.get("content", [])
@@ -103,7 +103,7 @@ class AIClient:
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 log.info("Stream call %s model=%s msgs=%d (attempt %d)", api_url, self._model, len(messages), attempt + 1)
-                with httpx.stream("POST", api_url, headers=headers, json=body, timeout=_STREAM_TIMEOUT) as resp:
+                with httpx.stream("POST", api_url, headers=headers, json=body, timeout=_STREAM_TIMEOUT, verify=False) as resp:
                     if not resp.is_success:
                         if 400 <= resp.status_code < 500:
                             log.error("Stream client error %s: %s", resp.status_code, resp.text[:500])

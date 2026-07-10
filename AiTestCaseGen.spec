@@ -29,6 +29,7 @@ a = Analysis(
         "utils.json_parser",
         "prompts.testcase_prompt",
         "config.settings",
+        "services.memory_store",
         "clr_loader",
     ],
     hookspath=[],

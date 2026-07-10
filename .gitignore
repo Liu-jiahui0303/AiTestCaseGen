@@ -42,6 +42,9 @@ dist/
 *.pyc
 *.pyo
 
+# 知识库本地数据
+knowledge_base.db
+
 # WebView 持久化数据（exe 同目录）
 webview_data/
 

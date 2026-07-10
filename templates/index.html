@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI 测试用例生成器</title>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=1783425327">
 </head>
 <body>
 
@@ -40,6 +40,22 @@
           <button class="btn btn-sm prompt-action" onclick="addPrompt()" title="新增">+</button>
           <button class="btn btn-sm prompt-action btn-danger" onclick="deletePrompt()" title="删除" style="margin-left:auto;">🗑</button>
         </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-header" onclick="toggleSection(this)">🧠 知识库</div>
+      <div class="section-body">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <span style="font-size:11px;color:var(--text-dim);" id="kbStat">已积累 0 份参考</span>
+        </div>
+        <label style="font-size:11px;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="kbUseToggle" onchange="onKbToggle()"> 生成时自动引用历史范例
+        </label>
+        <label style="font-size:11px;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="kbSaveToggle" onchange="onKbToggle()"> 生成后存入知识库
+        </label>
+        <button class="btn btn-sm" onclick="openKbBrowser()" style="margin-top:6px;">📋 浏览知识库</button>
       </div>
     </div>
 
@@ -121,6 +137,30 @@
   </div>
 </div>
 
+<!-- 知识库浏览 -->
+<div class="modal-overlay" id="kbModal" style="display:none;" onclick="if(event.target===this)closeKbModal()">
+  <div class="modal" style="width:700px;"><div class="modal-header"><span>📚 知识库</span><span class="modal-header-spacer"></span><span style="font-size:10px;color:var(--text-dim);" id="kbModalCount">0 条记录</span><button class="btn btn-sm" onclick="openDedupPreview()" title="手动去重" style="margin-right:8px;">🔍 手动去重</button><button class="btn btn-sm btn-danger" onclick="clearKnowledge()" title="清空" style="margin-right:8px;">清空</button><button class="modal-close" onclick="closeKbModal()">✕</button></div>
+    <div class="modal-body" id="kbList" style="max-height:400px;overflow-y:auto;">
+      <div style="text-align:center;color:var(--empty-color);padding:30px 0;font-size:12px;">暂无历史记录</div>
+    </div>
+  </div>
+</div>
+
+<!-- 去重预览弹窗 -->
+<div class="modal-overlay" id="dedupModal" style="display:none;" onclick="if(event.target===this)closeDedupModal()">
+  <div class="modal" style="width:750px;max-height:80vh;"><div class="modal-header"><span>🔍 手动去重</span><span class="modal-header-spacer"></span><button class="modal-close" onclick="closeDedupModal()">✕</button></div>
+    <div class="modal-body" id="dedupBody" style="max-height:55vh;overflow-y:auto;">
+      <div style="text-align:center;padding:40px 0;color:var(--text-dim);" id="dedupLoading">⏳ 正在分析数据...</div>
+      <div id="dedupResult" style="display:none;"></div>
+    </div>
+    <div class="modal-footer" id="dedupFooter" style="display:none;">
+      <span style="font-size:11px;color:var(--text-dim);flex:1;" id="dedupSummary"></span>
+      <button class="btn" onclick="closeDedupModal()">取消</button>
+      <button class="btn btn-primary" id="dedupExecBtn" onclick="executeDedup()">确认去重</button>
+    </div>
+  </div>
+</div>
+
 <!-- 聊天窗口 -->
 <div class="modal-overlay" id="chatModal" style="display:none;" onclick="if(event.target===this)closeChat()">
   <div class="modal chat-modal"><div class="modal-header"><span>AI 对话</span><span class="modal-header-spacer"></span><span style="font-size:10px;color:var(--text-dim);margin-right:4px;" id="chatModelLabel"></span><button class="btn btn-sm" onclick="clearChat()" title="清空" style="margin-right:4px;">清空</button><button class="modal-close" onclick="closeChat()">✕</button></div>
@@ -134,6 +174,6 @@
 
 <div class="toast-wrap" id="toastWrap"></div>
 
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=1783492600"></script>
 </body>
 </html>
