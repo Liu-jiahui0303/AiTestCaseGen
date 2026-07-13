@@ -89,6 +89,21 @@ pyinstaller AiTestCaseGen.spec
 
 ---
 
+## 获取 API Key
+
+工具支持两种模型，至少配置一个即可使用：
+
+| 模型 | 提供商 | 获取地址 |
+|------|--------|----------|
+| DeepSeek V4 Pro | DeepSeek | [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) |
+| Qwen3.7-Plus（图文） | 阿里云百炼 | [bailian.console.aliyun.com](https://bailian.console.aliyun.com/cn-beijing/?tab=model#/api-key) |
+
+1. 点击上方链接注册/登录对应平台
+2. 创建 API Key 并复制
+3. 回到工具左侧面板，选择模型后粘贴 Key → 保存配置
+
+---
+
 ## 项目结构
 
 ```
