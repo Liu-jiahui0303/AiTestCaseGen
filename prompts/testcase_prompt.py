@@ -129,8 +129,10 @@ def _load():
 
 
 def save_prompts(prompts: list) -> None:
-    with open(_JSON_PATH, "w", encoding="utf-8") as f:
+    tmp = _JSON_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(prompts, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, _JSON_PATH)  # 原子替换，避免 Flask auto-reload 读到半截文件
     global BUILTIN_PROMPTS, SYSTEM_PROMPT, USER_MESSAGE_TEMPLATE
     BUILTIN_PROMPTS = prompts
     SYSTEM_PROMPT = prompts[0]["system"] if prompts else _DEFAULTS[0]["system"]

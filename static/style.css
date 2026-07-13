@@ -129,6 +129,8 @@
   .stream-thinking{color:var(--think-text);margin-bottom:8px;padding:8px 12px;background:var(--stream-think);border-radius:4px;white-space:pre-wrap;}
   .stream-label{font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;}
   .stream-text{white-space:pre-wrap;color:var(--text);}
+  .stream-spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
   .stream-cursor{display:inline-block;width:8px;height:14px;background:var(--accent);animation:blink .8s infinite;vertical-align:middle;margin-left:2px;}
   @keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
   .toast-wrap{position:fixed;top:36px;right:10px;z-index:10000;display:flex;flex-direction:column;gap:4px;}
@@ -175,3 +177,28 @@
   .chat-typing span{width:6px;height:6px;background:var(--text-dim);border-radius:50%;animation:typeBounce 1.2s infinite;}
   .chat-typing span:nth-child(2){animation-delay:.2s;}.chat-typing span:nth-child(3){animation-delay:.4s;}
   @keyframes typeBounce{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-4px);}}
+
+  /* ── 图片粘贴区 ── */
+  .image-area{border-top:1px solid var(--border);padding:6px 10px;background:var(--gen-btn-area-bg);}
+  .image-area-label{font-size:10px;color:var(--text-dim);margin-bottom:4px;font-weight:600;}
+  .image-scroll{display:flex;gap:6px;overflow-x:auto;padding:4px 0;min-height:60px;align-items:center;outline:none;}
+  .image-scroll:focus,.image-scroll.drag-over{box-shadow:inset 0 0 0 2px var(--accent);border-radius:4px;}
+  .image-placeholder{font-size:10px;color:var(--text-dim);opacity:.5;width:100%;text-align:center;padding:12px 0;}
+  .img-thumb{position:relative;flex-shrink:0;width:72px;height:72px;border:1px solid var(--border);border-radius:4px;overflow:hidden;cursor:pointer;transition:border-color .15s;}
+  .img-thumb:hover{border-color:var(--accent);}
+  .img-thumb img{width:100%;height:100%;object-fit:cover;}
+  .img-thumb-del{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;border:none;background:rgba(244,67,54,.85);color:#fff;font-size:10px;line-height:18px;text-align:center;cursor:pointer;padding:0;opacity:0;transition:opacity .15s;}
+  .img-thumb:hover .img-thumb-del{opacity:1;}
+
+  /* ── 图片预览弹窗 ── */
+  .img-preview-close{position:fixed;top:16px;right:20px;background:rgba(0,0,0,.5);border:none;color:#fff;font-size:20px;width:36px;height:36px;border-radius:50%;cursor:pointer;z-index:1;line-height:36px;text-align:center;}
+  .img-preview-close:hover{background:rgba(244,67,54,.8);}
+  .img-preview-arrow{position:fixed;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);border:none;color:#fff;font-size:24px;width:40px;height:60px;border-radius:6px;cursor:pointer;z-index:1;}
+  .img-preview-arrow:hover{background:rgba(0,0,0,.8);}
+  .img-preview-prev{left:12px;}
+  .img-preview-next{right:12px;}
+
+  /* ── 知识库帮助提示 ── */
+  .kb-help{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--text-dim);color:var(--text-dim);font-size:11px;font-weight:700;cursor:help;margin-left:6px;position:relative;}
+  .kb-help-tip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#333;color:#fff;font-size:11px;line-height:1.6;padding:8px 12px;border-radius:6px;white-space:normal;width:280px;font-weight:400;text-align:left;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.3);pointer-events:none;}
+  .kb-help:hover .kb-help-tip{display:block;}

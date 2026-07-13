@@ -3,7 +3,7 @@ import time
 import httpx
 from typing import Generator
 
-from config.settings import DEFAULT_BASE_URL, DEFAULT_MODEL, API_TIMEOUT, MAX_TOKENS
+from config.settings import DEFAULT_BASE_URL, DEFAULT_MODEL, QWEN_BASE_URL, QWEN_MODEL, API_TIMEOUT, MAX_TOKENS
 from prompts.testcase_prompt import SYSTEM_PROMPT, USER_MESSAGE_TEMPLATE
 from utils.logger import setup_logging
 
@@ -184,3 +184,107 @@ class AIClient:
             messages=[{"role": "user", "content": ut.format(prd_text=prd_text)}],
             system_prompt=sp,
         )
+
+
+# ── 千问多模态流式生成（OpenAI Chat Completions 格式，独立于 AIClient） ──
+
+def qwen_multimodal_stream(
+    api_key: str,
+    base_url: str,
+    model: str,
+    content_parts: list,
+    system_prompt: str = "",
+    max_tokens: int = MAX_TOKENS,
+) -> Generator[dict, None, None]:
+    """千问 Qwen3.7-Plus 多模态流式生成。
+    content_parts: OpenAI 格式的 content 数组，
+      如 [{"type":"text","text":"..."}, {"type":"image_url","image_url":{"url":"data:..."}}]
+    返回事件格式与 DeepSeek 流式一致：{type, text, thinking}，前端无需改动。
+    """
+    api_url = (base_url or QWEN_BASE_URL).rstrip("/") + "/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": content_parts})
+
+    body = {
+        "model": model or QWEN_MODEL,
+        "messages": messages,
+        "stream": True,
+        "max_tokens": max_tokens,
+        "enable_thinking": True,
+    }
+
+    last_err = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            log.info("Qwen multimodal call %s model=%s parts=%d (attempt %d)",
+                     api_url, body["model"], len(content_parts), attempt + 1)
+            with httpx.stream("POST", api_url, headers=headers, json=body,
+                              timeout=_STREAM_TIMEOUT, verify=False) as resp:
+                if not resp.is_success:
+                    if 400 <= resp.status_code < 500:
+                        log.error("Qwen client error %s: %s", resp.status_code, resp.text[:500])
+                        yield {"type": "error", "message": f"API 请求失败 ({resp.status_code}): {resp.text[:200]}"}
+                        return
+                    log.warning("Qwen server error %s (attempt %d/%d)",
+                                resp.status_code, attempt + 1, _MAX_RETRIES + 1)
+                    last_err = RuntimeError(f"API 请求失败 ({resp.status_code})")
+                    if attempt < _MAX_RETRIES:
+                        time.sleep(_RETRY_BACKOFF ** (attempt + 1))
+                        continue
+                    yield {"type": "error", "message": str(last_err)}
+                    return
+
+                for line in resp.iter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    data_str = line[6:]
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        event = json.loads(data_str)
+                        ev = _parse_qwen_stream_event(event)
+                        if ev is not None:
+                            yield ev
+                    except json.JSONDecodeError:
+                        log.debug("Qwen stream JSON error: %s", data_str[:100])
+                        continue
+                yield {"type": "done"}
+                return
+        except (httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError) as e:
+            log.warning("Qwen network error (attempt %d/%d): %s", attempt + 1, _MAX_RETRIES + 1, e)
+            last_err = e
+            if attempt < _MAX_RETRIES:
+                time.sleep(_RETRY_BACKOFF ** (attempt + 1))
+                continue
+    yield {"type": "error", "message": f"连接失败: {last_err}"}
+
+
+def _parse_qwen_stream_event(event: dict) -> dict | None:
+    """将 OpenAI chat.completions SSE chunk 转为统一事件格式"""
+    choices = event.get("choices", [])
+    if not choices:
+        return None
+    delta = choices[0].get("delta", {})
+    # 思考内容
+    reasoning = delta.get("reasoning_content") or ""
+    # 正文内容
+    content = delta.get("content") or ""
+    finish = choices[0].get("finish_reason") or ""
+
+    if reasoning and not content:
+        return {"type": "thinking", "text": "", "thinking": reasoning}
+    if content:
+        result = {"type": "text", "text": content, "thinking": ""}
+        if reasoning:
+            result["thinking"] = reasoning
+        return result
+    if finish and finish != "stop":
+        return {"type": "error", "message": f"生成异常终止: {finish}"}
+    return None

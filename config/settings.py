@@ -1,6 +1,8 @@
 # 默认 API 配置
 DEFAULT_BASE_URL = "https://api.deepseek.com/anthropic"
 DEFAULT_MODEL = "deepseek-v4-pro[1M]"
+QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+QWEN_MODEL = "qwen3.7-plus"
 API_TIMEOUT = 180
 MAX_TOKENS = 65536
 

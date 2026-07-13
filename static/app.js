@@ -1,22 +1,47 @@
 // ── 配置 ──
 const CFG_KEY='tcgen_config',PROMPT_STORE_KEY='tcgen_prompts',STORE_KEY='tcgen_sessions';
+const MODEL_PRESETS={
+  dp:{baseUrl:'https://api.deepseek.com/anthropic',model:'deepseek-v4-pro[1M]',apiKey:'',label:'DeepSeek V4 Pro'},
+  qwen:{baseUrl:'https://dashscope.aliyuncs.com/compatible-mode/v1',model:'qwen3.7-plus',apiKey:'',label:'Qwen3.7-Plus（图文）'}
+};
 let allPrompts=[],modalMode='add',editingPromptId=null;
 
-function loadConfig(){try{return JSON.parse(localStorage.getItem(CFG_KEY))||{};}catch(e){console.error('loadConfig:',e);return{};}}
+function loadConfig(){
+  try{
+    let c=JSON.parse(localStorage.getItem(CFG_KEY))||{};
+    // 迁移旧格式
+    if(!c.dp&&c.baseUrl){c={activeModel:'dp',dp:{baseUrl:c.baseUrl,model:c.model||'deepseek-v4-pro[1M]',apiKey:c.apiKey||''},qwen:{...MODEL_PRESETS.qwen},activePrompt:c.activePrompt};}
+    if(!c.dp)c.dp={...MODEL_PRESETS.dp};
+    if(!c.qwen)c.qwen={...MODEL_PRESETS.qwen};
+    if(!c.activeModel)c.activeModel='dp';
+    return c;
+  }catch(e){console.error('loadConfig:',e);return{activeModel:'dp',dp:{...MODEL_PRESETS.dp},qwen:{...MODEL_PRESETS.qwen}};}
+}
+function getActiveModel(){const c=loadConfig();return c.activeModel||'dp';}
 function applyConfig(){
-  const c=loadConfig();
-  document.getElementById('baseUrl').value=c.baseUrl||'https://api.deepseek.com/anthropic';
-  document.getElementById('model').value=c.model||'deepseek-v4-pro[1M]';
-  document.getElementById('apiKey').value=c.apiKey||'';
-  document.getElementById('toolbarModel').textContent=c.model||'deepseek-v4-pro[1M]';
+  const c=loadConfig(),am=getActiveModel(),m=c[am]||c.dp;
+  document.getElementById('modelSelect').value=am;
+  document.getElementById('baseUrl').value=m.baseUrl||'';
+  document.getElementById('apiKey').value=m.apiKey||'';
+  document.getElementById('toolbarModel').textContent=(MODEL_PRESETS[am]||MODEL_PRESETS.dp).label;
+  document.getElementById('imageArea').style.display=am==='qwen'?'':'none';
   refreshPromptSelect();
 }
 function saveConfig(){
-  const c=loadConfig();
-  c.baseUrl=document.getElementById('baseUrl').value.trim();
-  c.model=document.getElementById('model').value.trim();
-  c.apiKey=document.getElementById('apiKey').value.trim();
+  const c=loadConfig(),am=getActiveModel();
+  c[am].baseUrl=document.getElementById('baseUrl').value.trim();
+  c[am].apiKey=document.getElementById('apiKey').value.trim();
   localStorage.setItem(CFG_KEY,JSON.stringify(c));applyConfig();toast('配置已保存');
+}
+function onModelChange(){
+  const c=loadConfig(),am=document.getElementById('modelSelect').value;
+  c.activeModel=am;
+  if(!c[am])c[am]={...MODEL_PRESETS[am]};
+  localStorage.setItem(CFG_KEY,JSON.stringify(c));
+  document.getElementById('baseUrl').value=c[am].baseUrl||'';
+  document.getElementById('apiKey').value=c[am].apiKey||'';
+  document.getElementById('toolbarModel').textContent=(MODEL_PRESETS[am]||{}).label||'';
+  document.getElementById('imageArea').style.display=am==='qwen'?'':'none';
 }
 
 // ── 主题 ──
@@ -149,7 +174,8 @@ function renderSessionTabs(){
 let currentStreamAbort=null,fullText='',fullThinking='',kbMatchCount=-1,contentBlockType='';
 async function generate(){
   const prd=document.getElementById('prdInput').value.trim();
-  const cfg=loadConfig();const ak=cfg.apiKey||'',bu=cfg.baseUrl||'https://api.deepseek.com/anthropic',md=cfg.model||'deepseek-v4-pro[1M]';
+  const cfg=loadConfig(),am=getActiveModel(),m=cfg[am]||cfg.dp;
+  const ak=m.apiKey||'',bu=m.baseUrl||'',md=m.model||'';
   const prompt=getActivePrompt();
   if(!prd){toast('请输入 PRD 内容','error');return;}if(!ak){toast('请配置 API Key','error');return;}
 
@@ -169,6 +195,8 @@ async function generate(){
     area.appendChild(sep);
   }
   const block=document.createElement('div');
+  // 初始 loading 状态，第一条内容到达后会被覆盖
+  block.innerHTML='<div style="display:flex;align-items:center;gap:8px;padding:12px 0;color:var(--text-dim);font-size:12px;"><span class="stream-spinner"></span> 正在连接 AI 服务...</div>';
   area.appendChild(block);
   // 知识库引用 badge —— 独立 DOM 元素，不依赖 RAF
   const badge=document.createElement('div');
@@ -181,9 +209,14 @@ async function generate(){
   try{
     if(currentStreamAbort)currentStreamAbort.abort();
     ctrl=new AbortController();currentStreamAbort=ctrl;
-    const resp=await fetch('/api/generate/stream',{
+    const isQwen=am==='qwen';
+    const endpoint=isQwen?'/api/generate/stream/multimodal':'/api/generate/stream';
+    const body=isQwen
+      ?{prd,api_key:ak,base_url:bu,model:md,system_prompt:prompt?prompt.system:'',user_template:prompt?prompt.user:'',messages:session.messages.slice(-10),use_knowledge:getKbUseEnabled(),images:_pastedImages.map(img=>img.dataUrl)}
+      :{prd,api_key:ak,base_url:bu,model:md,system_prompt:prompt?prompt.system:'',user_template:prompt?prompt.user:'',messages:session.messages.slice(-10),use_knowledge:getKbUseEnabled()};
+    const resp=await fetch(endpoint,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({prd,api_key:ak,base_url:bu,model:md,system_prompt:prompt?prompt.system:'',user_template:prompt?prompt.user:'',messages:session.messages.slice(-10),use_knowledge:getKbUseEnabled()}),
+      body:JSON.stringify(body),
       signal:ctrl.signal,
     });
     if(!resp.ok){block.innerHTML='<div style="color:var(--danger)">请求失败: '+resp.status+'</div>';return;}
@@ -281,10 +314,11 @@ function updateStream(ev,area,block){
   }
   if(ev.type==='thinking'){fullThinking+=ev.thinking||'';}
   else if(ev.type==='text'){fullText+=ev.text||'';}
-  // 节流：最多 60fps 更新 DOM
+  // 节流：最多 60fps 更新 DOM（无实际内容时不覆盖 loading 动画）
   if(!_streamRAF)_streamRAF=requestAnimationFrame(()=>{
     _streamRAF=null;
     if(!block.isConnected)return;
+    if(!fullThinking&&!fullText)return; // 保持 loading 状态
     let h='';
     if(fullThinking)h+='<div class="stream-label">💭 思考过程</div><div class="stream-thinking">'+escHtml(fullThinking)+'</div>';
     h+='<div class="stream-label">📄 生成结果</div><div class="stream-text">'+escHtml(fullText)+'</div>';
@@ -718,6 +752,56 @@ async function executeDedup(){
     closeDedupModal();
     openKbBrowser();fetchKbStats();
   }catch(e){toast('去重失败: '+e.message,'error');btn.disabled=false;btn.textContent='确认去重';}
+}
+
+// ── 图片粘贴（千问多模态） ──
+// ── 图片粘贴 & 拖拽（千问多模态） ──
+let _pastedImages=[],_previewIndex=-1;
+function handleImagePaste(e){
+  const cd=e.clipboardData||(e.originalEvent&&e.originalEvent.clipboardData);
+  if(!cd||!cd.files||!cd.files.length)return;
+  const f=cd.files[0];
+  if(!f.type.startsWith('image/'))return;
+  e.preventDefault();
+  const reader=new FileReader();
+  reader.onload=function(ev){_pastedImages.push({dataUrl:ev.target.result,name:f.name||'paste.png'});renderImageThumbnails();};
+  reader.readAsDataURL(f);
+}
+function handleImageDragOver(e){e.preventDefault();}
+function handleImageDrop(e){
+  e.preventDefault();
+  if(!e.dataTransfer||!e.dataTransfer.files||!e.dataTransfer.files.length)return;
+  const files=Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
+  if(!files.length)return;
+  let loaded=0;
+  files.forEach(f=>{
+    const reader=new FileReader();
+    reader.onload=function(ev){_pastedImages.push({dataUrl:ev.target.result,name:f.name||'drop.png'});loaded++;if(loaded===files.length)renderImageThumbnails();};
+    reader.readAsDataURL(f);
+  });
+}
+function removeImage(index){_pastedImages.splice(index,1);renderImageThumbnails();}
+function renderImageThumbnails(){
+  const scroll=document.getElementById('imageScroll'),ph=document.getElementById('imagePlaceholder');
+  document.getElementById('imageCount').textContent=_pastedImages.length;
+  ph.style.display=_pastedImages.length?'none':'';
+  scroll.querySelectorAll('.img-thumb').forEach(el=>el.remove());
+  _pastedImages.forEach((img,i)=>{
+    const div=document.createElement('div');
+    div.className='img-thumb';
+    div.innerHTML='<button class="img-thumb-del" onclick="event.stopPropagation();removeImage('+i+')">✕</button><img src="'+img.dataUrl+'" alt="图片'+(i+1)+'" onclick="openImgPreview('+i+')">';
+    scroll.appendChild(div);
+  });
+}
+function openImgPreview(index){_previewIndex=index;updateImgPreview();document.getElementById('imgPreviewModal').style.display='';}
+function closeImgPreview(){document.getElementById('imgPreviewModal').style.display='none';_previewIndex=-1;}
+function navigateImage(dir){const n=_previewIndex+dir;if(n>=0&&n<_pastedImages.length){_previewIndex=n;updateImgPreview();}}
+function updateImgPreview(){
+  if(_previewIndex<0||_previewIndex>=_pastedImages.length)return;
+  document.getElementById('imgPreviewImg').src=_pastedImages[_previewIndex].dataUrl;
+  document.getElementById('imgPreviewCounter').textContent=(_previewIndex+1)+' / '+_pastedImages.length;
+  document.getElementById('imgPreviewPrev').style.display=_previewIndex>0?'':'none';
+  document.getElementById('imgPreviewNext').style.display=_previewIndex<_pastedImages.length-1?'':'none';
 }
 
 (async function init(){

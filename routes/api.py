@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context
 
-from services.ai_client import AIClient
+from services.ai_client import AIClient, qwen_multimodal_stream
 from services.excel_builder import build_excel
 from services import memory_store
 from utils.json_parser import extract_json
@@ -15,7 +15,8 @@ log = setup_logging("api")
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 # ── 安全限制 ──
-MAX_REQUEST_SIZE = 200 * 1024  # 200KB
+MAX_REQUEST_SIZE = 200 * 1024  # 200KB（纯文本）
+MAX_MULTIMODAL_SIZE = 10 * 1024 * 1024  # 10MB（图文）
 _RATE_WINDOW = 60  # 秒
 _RATE_MAX_GENERATE = 10  # 生成类接口每窗口最多请求数
 _RATE_MAX_OTHER = 60  # 其他接口每窗口最多请求数
@@ -42,8 +43,9 @@ def _check_rate_limit() -> tuple[bool, str]:
 def _guard():
     """请求体大小检查 + 速率限制"""
     if request.method in ("POST", "PUT", "PATCH"):
-        if request.content_length and request.content_length > MAX_REQUEST_SIZE:
-            return jsonify({"error": f"请求体过大，上限 {MAX_REQUEST_SIZE // 1024}KB"}), 413
+        max_size = MAX_MULTIMODAL_SIZE if "/multimodal" in request.path else MAX_REQUEST_SIZE
+        if request.content_length and request.content_length > max_size:
+            return jsonify({"error": f"请求体过大，上限 {max_size // 1024}KB"}), 413
     if request.method == "POST" and "/knowledge" not in request.path:
         ok, msg = _check_rate_limit()
         if not ok:
@@ -205,6 +207,133 @@ def generate_stream():
             log.info("Generate stream complete")
         except Exception as e:
             log.error("Generate stream error: %s", e)
+            yield _sse({"type": "error", "message": str(e)})
+
+    return Response(
+        stream_with_context(stream()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+    )
+
+
+@api_bp.route("/generate/stream/multimodal", methods=["POST"])
+def generate_multimodal_stream():
+    """多模态流式生成（千问 Qwen3.7-Plus，支持图片 + 文字）"""
+    data = request.get_json(silent=True) or {}
+    prd_text = (data.get("prd") or "").strip()
+    images = data.get("images") or []  # base64 data URI 列表
+    system_prompt = (data.get("system_prompt") or "").strip()
+    user_template = (data.get("user_template") or "").strip()
+    api_key = (data.get("api_key") or "").strip()
+    base_url = (data.get("base_url") or "").strip()
+    model = (data.get("model") or "").strip()
+
+    if not prd_text:
+        return jsonify({"error": "请输入 PRD 内容"}), 400
+    if not api_key:
+        return jsonify({"error": "请输入 API Key"}), 400
+
+    history = data.get("messages") or []
+    use_knowledge = data.get("use_knowledge", True)
+
+    def stream():
+        # 检索知识库
+        matched_refs = ""
+        if use_knowledge:
+            log.info("[知识库] 开始检索, PRD预览: %s...", prd_text[:80].replace("\n", " "))
+            matched = memory_store.search(prd_text, limit=3)
+            log.info("[知识库] 检索完成, 匹配 %d 条记录", len(matched))
+            if matched:
+                ref_parts = []
+                for idx, item in enumerate(matched):
+                    try:
+                        tcs = item.get("test_cases_json") or item.get("test_cases") or []
+                        if isinstance(tcs, str):
+                            tcs = json.loads(tcs)
+                    except Exception:
+                        tcs = []
+                    samples = []
+                    for tc in tcs[:2]:
+                        sid = tc.get("id", "?")
+                        title = tc.get("title", "")
+                        steps = (tc.get("steps", "") or "").replace("\n", " → ")
+                        exp = (tc.get("expected", "") or "")
+                        parts = [f"【{sid}】{title}"]
+                        if steps:
+                            parts.append(f"步骤: {steps}")
+                        if exp:
+                            parts.append(f"预期: {exp}")
+                        samples.append(" | ".join(parts))
+                    if samples:
+                        mods_raw = item.get("modules", [])
+                        if isinstance(mods_raw, str):
+                            try:
+                                mods_raw = json.loads(mods_raw)
+                            except Exception:
+                                mods_raw = []
+                        mods = ", ".join(mods_raw) if mods_raw else "历史记录"
+                        ref_parts.append(f"### {mods}（{len(tcs)}条用例）\n" + "\n".join(samples))
+                    log.info("[知识库] 记录#%d: id=%s, 模块=%s, 用例数=%d",
+                             idx + 1, item.get("id"), mods if samples else "N/A", len(tcs))
+                if ref_parts:
+                    matched_refs = (
+                        "## 参考范例（来自你之前处理过的类似 PRD，请参考其用例结构和覆盖思路，但不要照抄，"
+                        "结合当前 PRD 灵活调整）\n\n" + "\n\n".join(ref_parts) + "\n\n"
+                    )
+                    yield _sse({"type": "knowledge", "matched": len(matched),
+                                "refs": matched_refs})
+                    # 构建结构化记录
+                    kb_records = []
+                    for item in matched:
+                        try:
+                            tcs_raw = item.get("test_cases_json") or item.get("test_cases") or "[]"
+                            tcs_list = json.loads(tcs_raw) if isinstance(tcs_raw, str) else (tcs_raw or [])
+                        except Exception:
+                            tcs_list = []
+                        try:
+                            mods_raw2 = json.loads(item.get("modules", "[]")) if isinstance(item.get("modules"), str) else (item.get("modules") or [])
+                        except Exception:
+                            mods_raw2 = []
+                        kb_records.append({
+                            "id": item.get("id"), "modules": mods_raw2,
+                            "case_count": len(tcs_list),
+                            "samples": [{"id": tc.get("id", ""), "title": tc.get("title", ""),
+                                         "steps": tc.get("steps", ""), "expected": tc.get("expected", "")}
+                                        for tc in tcs_list[:5]],
+                        })
+                    yield _sse({"type": "knowledge", "matched": len(matched),
+                                "refs": matched_refs, "records": kb_records})
+                else:
+                    yield _sse({"type": "knowledge", "matched": 0})
+            else:
+                yield _sse({"type": "knowledge", "matched": 0})
+
+        yield _sse({"type": "connected"})
+        try:
+            sp = system_prompt or ""
+            ut = user_template or "{prd_text}"
+            user_text = ut.format(prd_text=prd_text)
+            if matched_refs:
+                user_text += "\n\n" + matched_refs
+
+            # 构建 OpenAI 多模态 content 数组
+            content_parts = [{"type": "text", "text": user_text}]
+            for img in images:
+                if isinstance(img, str) and img.startswith("data:"):
+                    content_parts.append({"type": "image_url", "image_url": {"url": img}})
+
+            log.info("Multimodal stream: PRD %d chars, images %d, system_prompt %d chars, user_msg %d chars",
+                     len(prd_text), len(images), len(sp), len(user_text))
+            log.info("[知识库] === User Message (含参考) START ===\n%s\n[知识库] === User Message END ===", user_text)
+
+            for event in qwen_multimodal_stream(
+                api_key=api_key, base_url=base_url, model=model,
+                content_parts=content_parts, system_prompt=sp,
+            ):
+                yield _sse(event)
+            log.info("Multimodal stream complete")
+        except Exception as e:
+            log.error("Multimodal stream error: %s", e)
             yield _sse({"type": "error", "message": str(e)})
 
     return Response(
