@@ -4,11 +4,11 @@ import json
 import os
 import sys
 
-# 打包后存 exe 同目录；开发时存 prompts/ 目录
+# 统一存项目根目录（exe 同目录），避免放在 prompts/ 下被 Flask reloader 监听
 if getattr(sys, "frozen", False):
     _DATA_DIR = os.path.dirname(sys.executable)
 else:
-    _DATA_DIR = os.path.dirname(__file__)
+    _DATA_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 项目根目录
 _JSON_PATH = os.path.join(_DATA_DIR, "builtin_prompts.json")
 
 _DEFAULTS = [
@@ -129,10 +129,8 @@ def _load():
 
 
 def save_prompts(prompts: list) -> None:
-    tmp = _JSON_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    with open(_JSON_PATH, "w", encoding="utf-8") as f:
         json.dump(prompts, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, _JSON_PATH)  # 原子替换，避免 Flask auto-reload 读到半截文件
     global BUILTIN_PROMPTS, SYSTEM_PROMPT, USER_MESSAGE_TEMPLATE
     BUILTIN_PROMPTS = prompts
     SYSTEM_PROMPT = prompts[0]["system"] if prompts else _DEFAULTS[0]["system"]

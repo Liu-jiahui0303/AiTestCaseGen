@@ -58,7 +58,7 @@ function toast(m,t){const e=document.createElement('div');e.className='toast-ite
 // ── 提示词 ──
 async function fetchPrompts(){
   try{
-    const r=await fetch('/api/prompts');const d=await r.json();
+    const r=await fetch('/api/prompts?_='+Date.now());const d=await r.json();
     allPrompts=d.prompts||[];
   }catch(e){
     console.error('fetchPrompts:',e);

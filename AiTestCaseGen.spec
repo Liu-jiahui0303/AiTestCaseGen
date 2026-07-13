@@ -13,7 +13,7 @@ a = Analysis(
     datas=[
         (str(_PROJECT_ROOT / "static"), "static"),
         (str(_PROJECT_ROOT / "templates"), "templates"),
-        (str(_PROJECT_ROOT / "prompts"), "prompts"),
+        (str(_PROJECT_ROOT / "prompts" / "testcase_prompt.py"), "prompts"),
         (str(_PROJECT_ROOT / "image"), "image"),
     ],
     hiddenimports=[

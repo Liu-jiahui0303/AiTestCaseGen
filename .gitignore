@@ -49,4 +49,4 @@ knowledge_base.db
 webview_data/
 
 # 提示词运行时数据（默认值在 testcase_prompt.py 的 _DEFAULTS 中）
-prompts/builtin_prompts.json
+builtin_prompts.json

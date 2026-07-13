@@ -69,7 +69,9 @@ def _sse(event: dict) -> str:
 
 @api_bp.route("/prompts", methods=["GET"])
 def get_prompts():
-    return jsonify({"prompts": BUILTIN_PROMPTS})
+    resp = jsonify({"prompts": BUILTIN_PROMPTS})
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return resp
 
 
 @api_bp.route("/prompts", methods=["POST"])
