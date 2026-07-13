@@ -2,6 +2,7 @@
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/Flask-3.x-000000?style=flat-square&logo=flask&logoColor=white" alt="Flask">
   <img src="https://img.shields.io/badge/DeepSeek-V4_Pro-4B7FE8?style=flat-square" alt="DeepSeek">
+  <img src="https://img.shields.io/badge/Qwen-3.7_Plus-FF6B00?style=flat-square" alt="Qwen">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
 </p>
 
@@ -9,7 +10,7 @@
 
 <p align="center">
   <b>粘贴 PRD → AI 分析 → 流式生成 → 一键导出 Excel</b><br>
-  <sub>基于 DeepSeek V4 模型驱动 · 思考模式 · 多轮对话 · 本地运行，数据安全</sub>
+  <sub>DeepSeek V4 / Qwen3.7-Plus 双模型驱动 · 思考模式 · 图文多模态 · 多轮对话 · 本地运行，数据安全</sub>
 </p>
 
 ---
@@ -39,7 +40,8 @@
 
 | 模块 | 说明 |
 |------|------|
-| 🧠 **AI 驱动** | DeepSeek V4 Pro 模型 + 思考模式，覆盖功能/边界/异常/安全多维测试 |
+| 🧠 **AI 驱动** | DeepSeek V4 Pro + Qwen3.7-Plus 双模型，思考模式，覆盖功能/边界/异常/安全多维测试 |
+| 🖼️ **图文多模态** | Qwen 模型支持粘贴/拖拽截图，结合 PRD 文字与界面截图一起生成用例 |
 | ⚡ **流式输出** | SSE 实时推流，思考过程与生成内容同步展示，支持随时终止 |
 | 💬 **多轮对话** | 生成后可追加需求（"再补 5 条性能用例"），完整上下文保留 |
 | 📑 **多会话** | 标签式管理，同时处理多个 PRD，互不干扰；生成中禁止切换防止内容丢失 |
@@ -96,9 +98,9 @@ AiTestCaseGen/
 ├── AiTestCaseGen.spec          # PyInstaller 打包配置
 ├── requirements.txt
 ├── config/settings.py          # 默认配置
+├── builtin_prompts.json         # 提示词运行时数据（自动持久化，默认值在 testcase_prompt.py）
 ├── prompts/
-│   ├── testcase_prompt.py      # 提示词定义
-│   └── builtin_prompts.json    # 提示词数据（页面编辑自动同步）
+│   └── testcase_prompt.py      # 提示词定义与内置默认值
 ├── services/
 │   ├── ai_client.py            # API 客户端（流式 + 非流式 + 思考模式 + 重试）
 │   ├── excel_builder.py        # Excel 生成
@@ -123,7 +125,8 @@ AiTestCaseGen/
 
 | 端点 | 说明 |
 |------|------|
-| `POST /api/generate/stream` | 流式生成测试用例（SSE） |
+| `POST /api/generate/stream` | 流式生成测试用例（SSE，DeepSeek） |
+| `POST /api/generate/stream/multimodal` | 千问多模态流式生成（SSE，支持图片） |
 | `POST /api/generate` | 非流式生成 |
 | `POST /api/chat` | 多轮对话 |
 | `POST /api/chat/stream` | 流式多轮对话（SSE） |
