@@ -54,6 +54,7 @@ function toggleTheme(){
 
 function toggleSection(h){h.classList.toggle('collapsed');h.nextElementSibling.classList.toggle('collapsed');}
 function toast(m,t){const e=document.createElement('div');e.className='toast-item '+(t||'');e.textContent=m;document.getElementById('toastWrap').appendChild(e);setTimeout(()=>{e.style.opacity='0';e.style.transition='opacity .3s';},2200);setTimeout(()=>e.remove(),2600);}
+function toastPersist(m,t){const e=document.createElement('div');e.className='toast-item persist '+(t||'');const s=document.createElement('span');s.textContent=m;const x=document.createElement('button');x.className='toast-close';x.textContent='✕';x.title='关闭';x.onclick=()=>{e.style.opacity='0';e.style.transition='opacity .3s';setTimeout(()=>e.remove(),300);};e.appendChild(s);e.appendChild(x);document.getElementById('toastWrap').appendChild(e);}
 
 // ── 提示词 ──
 async function fetchPrompts(){
@@ -241,7 +242,7 @@ async function generate(){
     if(document.getElementById('chatModal').style.display!=='none')rebuildChatHistory();
     // 解析 JSON → 表格 (用户手动停止时跳过)
     if(!aborted){try{
-      const jsonStr=extractJson(fullText);if(!jsonStr||jsonStr.length<10){block.innerHTML=_renderStreamHTML();saveSessions();return;}
+      const jsonStr=extractJson(fullText);if(!jsonStr||jsonStr.length<10){block.innerHTML=_renderStreamHTML();saveSessions();toastPersist('AI 未返回有效的 JSON 格式，请重新生成','error');return;}
       const data=JSON.parse(jsonStr),tc=data.test_cases||[];
       if(tc.length>0){
         session.testCases=tc;saveSessions();block.innerHTML+=`<div style="color:var(--accent);font-weight:600;margin-top:8px;">✅ 已生成 ${tc.length} 条测试用例（下方表格）</div>`;
@@ -251,7 +252,7 @@ async function generate(){
           if(prd&&prd.length>4&&session.testCases.length)saveToKnowledgeBase(session,prd);
         }
       }else{block.innerHTML=_renderStreamHTML();saveSessions();}
-    }catch(e){console.warn('JSON 解析失败 (AI 输出格式异常，已展示原始结果):',e.message);block.innerHTML=_renderStreamHTML()+'<div style="color:var(--danger);margin-top:6px;">⚠️ AI 返回的 JSON 格式有误，请检查上方原始结果或重试</div>';saveSessions();}}
+    }catch(e){console.warn('JSON 解析失败 (AI 输出格式异常，已展示原始结果):',e.message);block.innerHTML=_renderStreamHTML()+'<div style="color:var(--danger);margin-top:6px;">⚠️ AI 返回的 JSON 格式有误，请检查上方原始结果或重试</div>';saveSessions();toastPersist('AI 返回的 JSON 格式有误，请重新生成','error');}}
   }
 }
 

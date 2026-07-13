@@ -324,13 +324,14 @@ def generate_multimodal_stream():
                 if isinstance(img, str) and img.startswith("data:"):
                     content_parts.append({"type": "image_url", "image_url": {"url": img}})
 
-            log.info("Multimodal stream: PRD %d chars, images %d, system_prompt %d chars, user_msg %d chars",
-                     len(prd_text), len(images), len(sp), len(user_text))
+            log.info("Multimodal stream: PRD %d chars, images %d, system_prompt %d chars, user_msg %d chars, history %d msgs",
+                     len(prd_text), len(images), len(sp), len(user_text), len(history))
             log.info("[知识库] === User Message (含参考) START ===\n%s\n[知识库] === User Message END ===", user_text)
 
             for event in qwen_multimodal_stream(
                 api_key=api_key, base_url=base_url, model=model,
                 content_parts=content_parts, system_prompt=sp,
+                history=history,
             ):
                 yield _sse(event)
             log.info("Multimodal stream complete")

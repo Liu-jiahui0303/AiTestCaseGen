@@ -194,11 +194,13 @@ def qwen_multimodal_stream(
     model: str,
     content_parts: list,
     system_prompt: str = "",
+    history: list | None = None,
     max_tokens: int = MAX_TOKENS,
 ) -> Generator[dict, None, None]:
     """千问 Qwen3.7-Plus 多模态流式生成。
     content_parts: OpenAI 格式的 content 数组，
       如 [{"type":"text","text":"..."}, {"type":"image_url","image_url":{"url":"data:..."}}]
+    history: 历史消息列表 [{"role":"user","content":"..."}, {"role":"assistant","content":"..."}, ...]
     返回事件格式与 DeepSeek 流式一致：{type, text, thinking}，前端无需改动。
     """
     api_url = (base_url or QWEN_BASE_URL).rstrip("/") + "/chat/completions"
@@ -210,6 +212,10 @@ def qwen_multimodal_stream(
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
+    # 插入历史对话，保持上下文连贯
+    for h in (history or []):
+        if isinstance(h, dict) and h.get("role") in ("user", "assistant") and h.get("content"):
+            messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": content_parts})
 
     body = {
