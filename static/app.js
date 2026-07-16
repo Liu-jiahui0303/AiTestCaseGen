@@ -123,14 +123,14 @@ async function deleteCurrentPrompt(){
 // ── 会话管理 ──
 let sessions=[{id:'s1',name:'会话 1',messages:[],testCases:[]}],activeSessionId='s1';
 function loadSessions(){try{const s=localStorage.getItem(STORE_KEY);if(s){const d=JSON.parse(s);if(d.length){sessions=d;const aid=localStorage.getItem('tcgen_active_sid');if(aid&&sessions.find(s=>s.id===aid))activeSessionId=aid;else activeSessionId=sessions[0].id;}}}catch(e){console.error('loadSessions:',e);}}
-function saveSessions(){localStorage.setItem(STORE_KEY,JSON.stringify(sessions.map(s=>{const{_streamHTML,...r}=s;return r;})));localStorage.setItem('tcgen_active_sid',activeSessionId);}
+function saveSessions(){localStorage.setItem(STORE_KEY,JSON.stringify(sessions));localStorage.setItem('tcgen_active_sid',activeSessionId);}
 function getSession(){return sessions.find(s=>s.id===activeSessionId)||sessions[0];}
 function switchSession(sid, force){
   // 同会话不处理（除非强制刷新）
   if(!force && sid===activeSessionId)return;
   if(!force && currentStreamAbort){toast('请等待生成完成或手动停止后再切换会话','error');return;}
-  // 保存当前会话的流式区域内容
-  const cur=getSession();if(cur)cur._streamHTML=document.getElementById('streamArea').innerHTML;
+  // 保存当前会话的流式区域内容（非空才存，避免初始化时覆盖已保存数据）
+  const cur=getSession();if(cur){const h=document.getElementById('streamArea').innerHTML.trim();if(h)cur._streamHTML=h;}
   activeSessionId=sid;const s=getSession();saveSessions();
   document.querySelectorAll('.session-tab').forEach(t=>t.classList.toggle('active',t.dataset.sid===sid));
   // 恢复目标会话的流式内容
@@ -792,7 +792,7 @@ function updateImgPreview(){
 }
 
 (async function init(){
-  loadSessions();renderSessionTabs();
+  loadSessions();renderSessionTabs();switchSession(activeSessionId,true);
   await fetchPrompts();applyConfig();
   fetchKbStats();
   document.getElementById('kbUseToggle').checked=localStorage.getItem('tcgen_kb_use')==='true';
