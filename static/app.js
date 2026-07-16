@@ -201,7 +201,7 @@ async function generate(){
   area.appendChild(block);
   // 知识库引用 badge —— 独立 DOM 元素，不依赖 RAF
   const badge=document.createElement('div');
-  badge.style.cssText='display:none;font-size:12px;font-weight:600;padding:4px 12px;border-radius:4px;margin-bottom:8px;';
+  badge.style.display='none';
   area.appendChild(badge);
   area.scrollTop=area.scrollHeight;
   fullText='';fullThinking='';kbMatchCount=-1;
@@ -265,8 +265,8 @@ function updateStream(ev,area,block){
     const badge=block.nextElementSibling;
     if(badge){
       if(kbMatchCount>0){
-        badge.innerHTML='📚 已引用 '+kbMatchCount+' 条历史参考 <span style="font-size:10px;opacity:0.8;">▶</span>';
-        badge.style.cssText='background:#2196F3;color:#fff;font-size:12px;font-weight:600;padding:4px 12px;border-radius:4px;display:inline-block;margin-bottom:8px;cursor:pointer;';
+        badge.innerHTML='REF: '+kbMatchCount+' <span style="font-size:10px;">▶</span>';
+        badge.className='kb-badge matched';
         badge.title='点击查看引用详情';
         badge._records=ev.records||[];
         badge._expanded=false;
@@ -277,29 +277,22 @@ function updateStream(ev,area,block){
             badge.querySelector('span').textContent='▶';
             badge._expanded=false;
           }else{
-            let html='<table style="width:100%;border-collapse:collapse;font-size:11px;">';
-            html+='<thead><tr style="background:#e0e0e0;">';
-            html+='<th style="padding:4px 8px;border:1px solid #ccc;text-align:left;">编号</th>';
-            html+='<th style="padding:4px 8px;border:1px solid #ccc;text-align:left;">标题</th>';
-            html+='<th style="padding:4px 8px;border:1px solid #ccc;text-align:left;">步骤</th>';
-            html+='<th style="padding:4px 8px;border:1px solid #ccc;text-align:left;">预期结果</th>';
-            html+='</tr></thead><tbody>';
+            let html='<table class="kb-detail-table">';
+            html+='<thead><tr><th>编号</th><th>标题</th><th>步骤</th><th>预期结果</th></tr></thead><tbody>';
             for(const rec of badge._records){
-              html+='<tr><td colspan="4" style="padding:4px 8px;background:#f0f4ff;font-weight:600;border:1px solid #ccc;">';
-              html+=escHtml((rec.modules||[]).join(' / '))+' · '+rec.case_count+'条用例 · ID:'+rec.id+'</td></tr>';
+              html+='<tr class="kb-module-header"><td colspan="4">'+escHtml((rec.modules||[]).join(' / '))+' · '+rec.case_count+'条用例 · ID:'+rec.id+'</td></tr>';
               for(const tc of rec.samples||[]){
                 html+='<tr>';
-                html+='<td style="padding:4px 8px;border:1px solid #ddd;vertical-align:top;"><code>'+escHtml(tc.id)+'</code></td>';
-                html+='<td style="padding:4px 8px;border:1px solid #ddd;vertical-align:top;">'+escHtml(tc.title)+'</td>';
-                html+='<td style="padding:4px 8px;border:1px solid #ddd;vertical-align:top;white-space:pre-wrap;">'+escHtml(tc.steps)+'</td>';
-                html+='<td style="padding:4px 8px;border:1px solid #ddd;vertical-align:top;white-space:pre-wrap;">'+escHtml(tc.expected)+'</td>';
+                html+='<td><code>'+escHtml(tc.id)+'</code></td>';
+                html+='<td>'+escHtml(tc.title)+'</td>';
+                html+='<td style="white-space:pre-wrap;">'+escHtml(tc.steps)+'</td>';
+                html+='<td style="white-space:pre-wrap;">'+escHtml(tc.expected)+'</td>';
                 html+='</tr>';
               }
             }
             html+='</tbody></table>';
             const div=document.createElement('div');
-            div.className='kb-detail';
-            div.style.cssText='background:#fff;border:1px solid #ccc;border-radius:4px;padding:8px;margin-bottom:8px;max-height:400px;overflow-y:auto;';
+            div.className='kb-detail kb-detail-panel';
             div.innerHTML=html;
             badge.after(div);
             badge.querySelector('span').textContent='▼';
@@ -307,8 +300,8 @@ function updateStream(ev,area,block){
           }
         };
       }else{
-        badge.textContent='📚 未找到相关历史参考';
-        badge.style.cssText='background:#999;color:#fff;font-size:12px;font-weight:600;padding:4px 12px;border-radius:4px;display:inline-block;margin-bottom:8px;';
+        badge.textContent='REF: 0';
+        badge.className='kb-badge none';
       }
     }
     return;
@@ -646,23 +639,16 @@ async function toggleKbDetail(event,id){
     const d=await r.json();
     const tcs=d.test_cases||[];
     if(!tcs.length){panel.innerHTML='<div style=\"color:var(--text-dim);text-align:center;padding:8px 0;\">无用例数据</div>';return;}
-    let html='<table style=\"width:100%;border-collapse:collapse;font-size:11px;margin-top:6px;\">';
-    html+='<thead><tr style=\"background:#e8e8e8;\">';
-    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">编号</th>';
-    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">标题</th>';
-    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">步骤</th>';
-    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">预期结果</th>';
-    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">类型</th>';
-    html+='<th style=\"padding:4px 6px;border:1px solid #ddd;text-align:left;\">优先级</th>';
-    html+='</tr></thead><tbody>';
+    let html='<table class="kb-detail-table" style="margin-top:6px;">';
+    html+='<thead><tr><th>编号</th><th>标题</th><th>步骤</th><th>预期结果</th><th>类型</th><th>优先级</th></tr></thead><tbody>';
     for(const tc of tcs){
       html+='<tr>';
-      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;\"><code>'+escHtml(tc.id)+'</code></td>';
-      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;\">'+escHtml(tc.title)+'</td>';
-      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;white-space:pre-wrap;\">'+escHtml(tc.steps)+'</td>';
-      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;white-space:pre-wrap;\">'+escHtml(tc.expected)+'</td>';
-      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;\">'+escHtml(tc.type)+'</td>';
-      html+='<td style=\"padding:4px 6px;border:1px solid #ddd;vertical-align:top;\">'+escHtml(tc.priority)+'</td>';
+      html+='<td><code>'+escHtml(tc.id)+'</code></td>';
+      html+='<td>'+escHtml(tc.title)+'</td>';
+      html+='<td style="white-space:pre-wrap;">'+escHtml(tc.steps)+'</td>';
+      html+='<td style="white-space:pre-wrap;">'+escHtml(tc.expected)+'</td>';
+      html+='<td>'+escHtml(tc.type)+'</td>';
+      html+='<td>'+escHtml(tc.priority)+'</td>';
       html+='</tr>';
     }
     html+='</tbody></table>';
@@ -703,28 +689,28 @@ async function openDedupPreview(){
     let html='';
     html+='<div style="margin-bottom:12px;font-size:12px;color:var(--text-dim);">共检测到 <b style="color:var(--danger);">'+d.groups.length+'</b> 组重复，涉及 <b>'+d.total_delete+'</b> 条可合并记录</div>';
     d.groups.forEach((g,i)=>{
-      html+='<div style="border:1px solid #ddd;border-radius:6px;padding:12px 14px;margin-bottom:12px;background:#fafafa;">';
-      html+='<div style="font-weight:600;font-size:13px;margin-bottom:8px;">📦 组 '+(i+1)+'：<span style="color:var(--accent);">'+escHtml(g.module)+'</span></div>';
+      html+='<div class="dedup-group">';
+      html+='<div style="font-weight:700;font-size:13px;margin-bottom:8px;">GROUP '+(i+1)+': <span style="color:var(--accent);">'+escHtml(g.module)+'</span></div>';
       // 保留记录
-      html+='<div style="background:#e8f5e9;border-left:3px solid #4caf50;border-radius:4px;padding:8px 10px;margin-bottom:6px;">';
-      html+='<div style="font-weight:600;font-size:12px;margin-bottom:4px;">✅ 保留记录 ID '+g.keep_id+'（'+g.keep_count+'条用例）</div>';
-      html+='<div style="font-size:11px;color:#555;">'+(g.keep_titles||[]).map(t=>'· '+escHtml(t)).join('<br>')+'</div>';
+      html+='<div class="dedup-keep">';
+      html+='<div class="dedup-keep-label">KEEP: ID '+g.keep_id+' ('+g.keep_count+' cases)</div>';
+      html+='<div class="dedup-keep-titles">'+(g.keep_titles||[]).map(t=>'· '+escHtml(t)).join('<br>')+'</div>';
       html+='</div>';
       // 合并来源
       for(let j=0;j<g.merge_items.length;j++){
         const m=g.merge_items[j];
-        html+='<div style="background:#fff3e0;border-left:3px solid #ff9800;border-radius:4px;padding:8px 10px;margin-bottom:4px;">';
-        html+='<div style="font-weight:600;font-size:12px;margin-bottom:4px;">📋 合并 ID '+m.id+'（'+m.count+'条用例）</div>';
+        html+='<div class="dedup-merge">';
+        html+='<div class="dedup-merge-label">MERGE: ID '+m.id+' ('+m.count+' cases)</div>';
         if(m.overlap&&m.overlap.length){
-          html+='<div style="font-size:11px;color:#999;margin-bottom:3px;">重复标题：'+(m.overlap).map(t=>escHtml(t)).join('、')+'</div>';
+          html+='<div class="dedup-merge-overlap">重复标题: '+(m.overlap).map(t=>escHtml(t)).join(', ')+'</div>';
         }
-        html+='<div style="font-size:11px;color:#555;">'+(m.titles||[]).map(t=>'· '+escHtml(t)).join('<br>')+'</div>';
+        html+='<div class="dedup-merge-titles">'+(m.titles||[]).map(t=>'· '+escHtml(t)).join('<br>')+'</div>';
         html+='</div>';
       }
       // 汇总
-      html+='<div style="margin-top:6px;font-size:11px;color:#666;line-height:1.6;">';
-      if(g.keep_only&&g.keep_only.length)html+='<span style="color:#4caf50;">保留独有：'+g.keep_only.map(t=>escHtml(t)).join('、')+'</span><br>';
-      if(g.new_only&&g.new_only.length)html+='<span style="color:var(--accent);">合并新增：'+g.new_only.map(t=>escHtml(t)).join('、')+'</span><br>';
+      html+='<div class="dedup-summary">';
+      if(g.keep_only&&g.keep_only.length)html+='<span class="keep">保留独有: '+g.keep_only.map(t=>escHtml(t)).join(', ')+'</span><br>';
+      if(g.new_only&&g.new_only.length)html+='<span class="merge">合并新增: '+g.new_only.map(t=>escHtml(t)).join(', ')+'</span><br>';
       html+='→ 去重后预计 <b style="color:var(--accent);">'+g.final_count+'</b> 条唯一用例';
       html+='</div>';
       html+='</div>';
