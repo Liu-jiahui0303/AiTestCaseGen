@@ -2,9 +2,15 @@
 
 import logging
 import os
+import sys
 from datetime import datetime
 
-LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+if getattr(sys, "frozen", False):
+    _ROOT = os.path.dirname(sys.executable)
+else:
+    _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+LOG_DIR = os.path.join(_ROOT, "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
 

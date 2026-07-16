@@ -261,7 +261,6 @@ def qwen_multimodal_stream(
                     except json.JSONDecodeError:
                         log.debug("Qwen stream JSON error: %s", data_str[:100])
                         continue
-                yield {"type": "done"}
                 return
         except (httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError) as e:
             log.warning("Qwen network error (attempt %d/%d): %s", attempt + 1, _MAX_RETRIES + 1, e)
@@ -270,6 +269,68 @@ def qwen_multimodal_stream(
                 time.sleep(_RETRY_BACKOFF ** (attempt + 1))
                 continue
     yield {"type": "error", "message": f"连接失败: {last_err}"}
+
+
+_SUMMARIZE_PROMPT = "你是会话命名助手。下面是一段 AI 生成测试用例时的思考过程，请根据思考过程中提到的功能模块和业务需求，提炼一个 15 字以内的简短会话标题。\n规则：\n1. 标题要概括本次 PRD 涉及的核心功能或业务，不是概括思考过程本身\n2. 直接输出标题，不要引号、标点、换行、前缀或任何解释\n3. 如果思考中提到了具体模块名（如'登录''支付''角色管理'），优先使用\n4. 严格不超过 15 个中文字"
+
+
+def summarize_text(api_key: str, base_url: str, model: str, thinking: str) -> str:
+    """用 AI 从思考过程中提取会话摘要（非流式、禁用思考模式）"""
+    import httpx as _httpx
+
+    api_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
+
+    # DeepSeek (Anthropic 格式)
+    if "deepseek" in api_url.lower():
+        resp = _httpx.post(
+            api_url + "/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": model or DEFAULT_MODEL,
+                "max_tokens": 64,
+                "thinking": {"type": "disabled"},
+                "system": _SUMMARIZE_PROMPT,
+                "messages": [{"role": "user", "content": thinking[:2000]}],
+            },
+            timeout=_httpx.Timeout(connect=10.0, read=20.0, write=10.0, pool=5.0),
+            verify=False,
+        )
+        if resp.is_success:
+            data = resp.json()
+            for block in data.get("content", []):
+                if block.get("type") == "text":
+                    return block.get("text", "").strip()[:30]
+    else:
+        # Qwen / OpenAI 兼容格式
+        resp = _httpx.post(
+            api_url + "/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model or QWEN_MODEL,
+                "max_tokens": 64,
+                "messages": [
+                    {"role": "system", "content": _SUMMARIZE_PROMPT},
+                    {"role": "user", "content": thinking[:2000]},
+                ],
+            },
+            timeout=_httpx.Timeout(connect=10.0, read=20.0, write=10.0, pool=5.0),
+            verify=False,
+        )
+        if resp.is_success:
+            data = resp.json()
+            choices = data.get("choices", [])
+            if choices:
+                return (choices[0].get("message", {}).get("content", "") or "").strip()[:30]
+
+    log.warning("Summarize failed: status=%s", resp.status_code if resp else "none")
+    return ""
 
 
 def _parse_qwen_stream_event(event: dict) -> dict | None:

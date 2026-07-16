@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context
 
-from services.ai_client import AIClient, qwen_multimodal_stream
+from services.ai_client import AIClient, qwen_multimodal_stream, summarize_text
 from services.excel_builder import build_excel
 from services import memory_store
 from utils.json_parser import extract_json
@@ -203,9 +203,24 @@ def generate_stream():
                      " (含知识库参考)" if matched_refs else "")
             log.info("[知识库] === 完整 System Prompt START ===\n%s\n[知识库] === 完整 System Prompt END ===", sp)
             log.info("[知识库] === User Message (含参考) START ===\n%s\n[知识库] === User Message END ===", user_content)
+            thinking_parts = []
+            api_key = (data.get("api_key") or "").strip()
+            base_url = (data.get("base_url") or "").strip()
+            model = (data.get("model") or "").strip()
             for event in client.chat_stream(messages, sp):
-                yield _sse(event)
-            yield _sse({"type": "done"})
+                if event.get("type") == "done":
+                    full_t = "".join(thinking_parts)
+                    title = ""
+                    if full_t:
+                        try:
+                            title = summarize_text(api_key, base_url, model, full_t)
+                        except Exception as e:
+                            log.warning("Auto title failed: %s", e)
+                    yield _sse({"type": "done", "title": title})
+                else:
+                    if event.get("thinking"):
+                        thinking_parts.append(event["thinking"])
+                    yield _sse(event)
             log.info("Generate stream complete")
         except Exception as e:
             log.error("Generate stream error: %s", e)
@@ -328,12 +343,20 @@ def generate_multimodal_stream():
                      len(prd_text), len(images), len(sp), len(user_text), len(history))
             log.info("[知识库] === User Message (含参考) START ===\n%s\n[知识库] === User Message END ===", user_text)
 
+            thinking_parts = []
             for event in qwen_multimodal_stream(
                 api_key=api_key, base_url=base_url, model=model,
                 content_parts=content_parts, system_prompt=sp,
                 history=history,
             ):
+                if event.get("thinking"):
+                    thinking_parts.append(event["thinking"])
                 yield _sse(event)
+            full_t="".join(thinking_parts);title=""
+            if full_t:
+                try:title=summarize_text(api_key,base_url,model,full_t)
+                except Exception as e:log.warning("Auto title failed: %s",e)
+            yield _sse({"type":"done","title":title})
             log.info("Multimodal stream complete")
         except Exception as e:
             log.error("Multimodal stream error: %s", e)
@@ -537,3 +560,25 @@ def knowledge_dedup_execute():
     result = memory_store.dedup_execute(groups)
     log.info("Dedup execute: deleted %d records, updated %d", result["deleted"], result["updated"])
     return jsonify(result)
+
+
+@api_bp.route("/summarize", methods=["POST"])
+def summarize():
+    """从思考过程中提取会话标题"""
+    data = request.get_json(silent=True) or {}
+    api_key = (data.get("api_key") or "").strip()
+    base_url = (data.get("base_url") or "").strip()
+    model = (data.get("model") or "").strip()
+    thinking = (data.get("thinking") or "").strip()
+
+    if not api_key:
+        return jsonify({"error": "请配置 API Key"}), 400
+    if not thinking:
+        return jsonify({"error": "无思考内容"}), 400
+
+    try:
+        title = summarize_text(api_key, base_url, model, thinking)
+        return jsonify({"title": title})
+    except Exception as e:
+        log.error("Summarize error: %s", e)
+        return jsonify({"error": str(e)}), 500

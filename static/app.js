@@ -125,6 +125,21 @@ let sessions=[{id:'s1',name:'会话 1',messages:[],testCases:[]}],activeSessionI
 function loadSessions(){try{const s=localStorage.getItem(STORE_KEY);if(s){const d=JSON.parse(s);if(d.length){sessions=d;const aid=localStorage.getItem('tcgen_active_sid');if(aid&&sessions.find(s=>s.id===aid))activeSessionId=aid;else activeSessionId=sessions[0].id;}}}catch(e){console.error('loadSessions:',e);}}
 function saveSessions(){localStorage.setItem(STORE_KEY,JSON.stringify(sessions));localStorage.setItem('tcgen_active_sid',activeSessionId);}
 function getSession(){return sessions.find(s=>s.id===activeSessionId)||sessions[0];}
+function autoRenameSession(thinking, sid){
+  if(!thinking||!thinking.trim())return;
+  const cfg=loadConfig(),am=getActiveModel(),m=cfg[am]||cfg.dp;
+  const ak=m.apiKey||'',bu=m.baseUrl||'',md=m.model||'';
+  if(!ak)return;
+  fetch('/api/summarize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:ak,base_url:bu,model:md,thinking})})
+    .then(r=>r.json())
+    .then(d=>{
+      if(!d.title)return;
+      const s=sessions.find(s=>s.id===sid);if(!s)return;
+      const name=d.title.trim();if(!name||s.name===name)return;
+      s.name=name;saveSessions();renderSessionTabs();
+    })
+    .catch(e=>console.error('autoRenameSession:',e));
+}
 function switchSession(sid, force){
   // 同会话不处理（除非强制刷新）
   if(!force && sid===activeSessionId)return;
@@ -166,9 +181,10 @@ function closeSession(sid){
 }
 function renderSessionTabs(){
   const bar=document.getElementById('sessionTabs');
-  bar.innerHTML=sessions.map(s=>
-    `<div class="session-tab${s.id===activeSessionId?' active':''}" data-sid="${s.id}" onclick="switchSession('${s.id}')" ondblclick="renameSession('${s.id}',prompt('新名称:','${s.name}')||'${s.name}')">${escHtml(s.name)}${sessions.length>1?`<span class="close-btn" onclick="event.stopPropagation();closeSession('${s.id}')">×</span>`:''}</div>`
-  ).join('')+'<div class="add-tab" onclick="addSession()" title="新建会话">＋</div>';
+  bar.innerHTML=sessions.map(s=>{
+    const full=s.name||'',display=full.length>14?full.substring(0,13)+'…':full;
+    return `<div class="session-tab${s.id===activeSessionId?' active':''}" data-sid="${s.id}" onclick="switchSession('${s.id}')" ondblclick="renameSession('${s.id}',prompt('新名称:','${s.name}')||'${s.name}')" title="${escHtml(full)}">${escHtml(display)}${sessions.length>1?`<span class="close-btn" onclick="event.stopPropagation();closeSession('${s.id}')">×</span>`:''}</div>`;
+  }).join('')+'<div class="add-tab" onclick="addSession()" title="新建会话">＋</div>';
 }
 
 // ── 生成（流式） ──
@@ -258,6 +274,10 @@ async function generate(){
 
 let _streamRAF=null;
 function updateStream(ev,area,block){
+  if(ev.type==='done'){
+    if(ev.title){const s=getSession();if(s&&!s._autoRenamed&&s.name!==ev.title){s.name=ev.title;s._autoRenamed=true;saveSessions();renderSessionTabs();}}
+    return;
+  }
   if(ev.type==='error'){block.innerHTML='<div style="color:var(--danger)">'+escHtml(ev.message||'流式错误')+'</div>';return;}
   if(ev.type==='knowledge'){
     kbMatchCount=ev.matched||0;
