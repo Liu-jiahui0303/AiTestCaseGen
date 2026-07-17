@@ -241,6 +241,11 @@ select.field-input{
   cursor:pointer;appearance:none;-webkit-appearance:none;
   background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 8px center;padding-right:26px;
 }
+select.field-input:disabled{cursor:not-allowed;opacity:.6;}
+.model-lock-hint{
+  margin-top:5px;padding:6px 8px;border-left:3px solid var(--accent);
+  background:var(--accent-dim);color:var(--btn-primary-text);font-size:10px;font-weight:600;line-height:1.5;
+}
 
 /* ── Prompt Select ── */
 .prompt-select-row{display:flex;gap:4px;align-items:center;}

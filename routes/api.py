@@ -401,6 +401,7 @@ def chat_stream():
 @api_bp.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json(silent=True) or {}
+    provider = (data.get("provider") or "").strip().lower()
     api_key = (data.get("api_key") or "").strip()
     base_url = (data.get("base_url") or "").strip()
     model = (data.get("model") or "").strip()
@@ -415,8 +416,35 @@ def chat():
         return jsonify({"error": "消息列表为空"}), 400
 
     try:
-        client = AIClient(api_key=api_key, base_url=base_url, model=model)
-        result = client.chat_raw(messages, system_prompt)
+        is_qwen = provider == "qwen" or model.lower().startswith("qwen") or "dashscope" in base_url.lower()
+        if is_qwen:
+            last_message = messages[-1]
+            if last_message.get("role") != "user" or not last_message.get("content"):
+                return jsonify({"error": "最后一条消息必须是用户消息"}), 400
+            content_parts = [{"type": "text", "text": str(last_message["content"])}]
+            text_parts, thinking_parts = [], []
+            for event in qwen_multimodal_stream(
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+                content_parts=content_parts,
+                system_prompt=system_prompt,
+                history=messages[:-1],
+            ):
+                if event.get("type") == "error":
+                    raise RuntimeError(event.get("message") or "Qwen 对话失败")
+                if event.get("text"):
+                    text_parts.append(event["text"])
+                if event.get("thinking"):
+                    thinking_parts.append(event["thinking"])
+            result = {
+                "content": "".join(text_parts),
+                "reasoning": "".join(thinking_parts),
+                "usage": {},
+            }
+        else:
+            client = AIClient(api_key=api_key, base_url=base_url, model=model)
+            result = client.chat_raw(messages, system_prompt)
         return jsonify({
             "content": result["content"],
             "reasoning": result["reasoning"],

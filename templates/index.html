@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI 测试用例生成器</title>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
-<link rel="stylesheet" href="/static/style.css?v=1784304600">
+<link rel="stylesheet" href="/static/style.css?v=1784307000">
 </head>
 <body>
 
@@ -23,7 +23,7 @@
     <div class="sidebar-section">
       <div class="section-header" onclick="toggleSection(this)">API 配置</div>
       <div class="section-body">
-        <div class="field"><label class="field-label">Model</label><select class="field-input" id="modelSelect" onchange="onModelChange()" style="cursor:pointer;"><option value="dp">DeepSeek V4 Pro</option><option value="qwen">Qwen3.7-Plus（图文）</option></select></div>
+        <div class="field"><label class="field-label">Model</label><select class="field-input" id="modelSelect" onchange="onModelChange()" aria-describedby="modelLockHint"><option value="dp">DeepSeek V4 Pro</option><option value="qwen">Qwen3.7-Plus（图文）</option></select><div class="model-lock-hint" id="modelLockHint" style="display:none;"></div></div>
         <div class="field"><label class="field-label">Base URL</label><input class="field-input" id="baseUrl" placeholder="https://api.deepseek.com/anthropic" spellcheck="false" readonly style="opacity:0.7;"></div>
         <div class="field"><label class="field-label">API Key</label><input class="field-input" type="text" id="apiKey" placeholder="sk-..." spellcheck="false" autocomplete="off" style="-webkit-text-security:disc;"></div>
         <button class="btn btn-sm" onclick="saveConfig()">保存配置</button>
@@ -192,6 +192,6 @@
 
 <div class="toast-wrap" id="toastWrap"></div>
 
-<script src="/static/app.js?v=1784305000"></script>
+<script src="/static/app.js?v=1784306000"></script>
 </body>
 </html>

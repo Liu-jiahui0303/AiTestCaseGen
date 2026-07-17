@@ -17,7 +17,10 @@ function loadConfig(){
     return c;
   }catch(e){console.error('loadConfig:',e);return{activeModel:'dp',dp:{...MODEL_PRESETS.dp},qwen:{...MODEL_PRESETS.qwen}};}
 }
-function getActiveModel(){const c=loadConfig();return c.activeModel||'dp';}
+function getActiveModel(){
+  const c=loadConfig(),s=getSession();
+  return (s&&(s.modelKey||s.draftModelKey))||c.activeModel||'dp';
+}
 function applyConfig(){
   const c=loadConfig(),am=getActiveModel(),m=c[am]||c.dp;
   document.getElementById('modelSelect').value=am;
@@ -25,6 +28,7 @@ function applyConfig(){
   document.getElementById('apiKey').value=m.apiKey||'';
   document.getElementById('toolbarModel').textContent=(MODEL_PRESETS[am]||MODEL_PRESETS.dp).label;
   document.getElementById('imageArea').style.display=am==='qwen'?'':'none';
+  updateModelLockUI();
   refreshPromptSelect();
 }
 function saveConfig(){
@@ -34,14 +38,18 @@ function saveConfig(){
   localStorage.setItem(CFG_KEY,JSON.stringify(c));applyConfig();toast('配置已保存');
 }
 function onModelChange(){
-  const c=loadConfig(),am=document.getElementById('modelSelect').value;
+  const c=loadConfig(),s=getSession(),am=document.getElementById('modelSelect').value;
+  if(s&&s.modelKey){applyConfig();toast('本会话已绑定模型，如需切换请新建会话','error');return;}
   c.activeModel=am;
   if(!c[am])c[am]={...MODEL_PRESETS[am]};
+  if(s)s.draftModelKey=am;
   localStorage.setItem(CFG_KEY,JSON.stringify(c));
+  saveSessions();
   document.getElementById('baseUrl').value=c[am].baseUrl||'';
   document.getElementById('apiKey').value=c[am].apiKey||'';
   document.getElementById('toolbarModel').textContent=(MODEL_PRESETS[am]||{}).label||'';
   document.getElementById('imageArea').style.display=am==='qwen'?'':'none';
+  updateModelLockUI();
 }
 
 // ── 主题 ──
@@ -121,10 +129,28 @@ async function deleteCurrentPrompt(){
 }
 
 // ── 会话管理 ──
-let sessions=[{id:'s1',name:'会话 1',messages:[],testCases:[]}],activeSessionId='s1';
+let sessions=[{id:'s1',name:'会话 1',messages:[],testCases:[],modelKey:null,draftModelKey:null}],activeSessionId='s1';
 function loadSessions(){try{const s=localStorage.getItem(STORE_KEY);if(s){const d=JSON.parse(s);if(d.length){sessions=d;const aid=localStorage.getItem('tcgen_active_sid');if(aid&&sessions.find(s=>s.id===aid))activeSessionId=aid;else activeSessionId=sessions[0].id;}}}catch(e){console.error('loadSessions:',e);}}
 function saveSessions(){localStorage.setItem(STORE_KEY,JSON.stringify(sessions));localStorage.setItem('tcgen_active_sid',activeSessionId);}
 function getSession(){return sessions.find(s=>s.id===activeSessionId)||sessions[0];}
+function updateModelLockUI(){
+  const s=getSession(),sel=document.getElementById('modelSelect'),hint=document.getElementById('modelLockHint');
+  if(!sel||!hint)return;
+  const locked=!!(s&&s.modelKey),key=locked?s.modelKey:getActiveModel();
+  sel.disabled=locked;
+  if(locked){
+    const label=(MODEL_PRESETS[key]||MODEL_PRESETS.dp).label;
+    const message='本会话已绑定 '+label+'，如需切换模型，请新建会话。';
+    hint.textContent='🔒 '+message;hint.style.display='block';sel.title=message;
+  }else{
+    hint.textContent='';hint.style.display='none';sel.title='选择当前会话使用的模型';
+  }
+}
+function lockSessionModel(session,modelKey){
+  if(!session||session.modelKey)return;
+  session.modelKey=modelKey;delete session.draftModelKey;saveSessions();
+  if(session.id===activeSessionId)applyConfig();
+}
 function autoRenameSession(thinking, sid){
   if(!thinking||!thinking.trim())return;
   const cfg=loadConfig(),am=getActiveModel(),m=cfg[am]||cfg.dp;
@@ -162,11 +188,12 @@ function switchSession(sid, force){
     hideResult();showEmpty();
     if(s.messages.length)document.getElementById('emptyState').querySelector('.sub').textContent='此会话有 '+s.messages.length+' 条对话记录，但无测试用例';
   }
+  applyConfig();
 }
 function addSession(){
   if(currentStreamAbort){toast('请等待生成完成或手动停止后再新增会话','error');return;}
-  const id='s'+Date.now(),n='会话 '+(sessions.length+1);
-  sessions.push({id,name:n,messages:[],testCases:[]});
+  const id='s'+Date.now(),n='会话 '+(sessions.length+1),draftModelKey=getActiveModel();
+  sessions.push({id,name:n,messages:[],testCases:[],modelKey:null,draftModelKey});
   saveSessions();renderSessionTabs();switchSession(id);
 }
 function renameSession(sid,name){
@@ -269,6 +296,7 @@ async function generate(){
     // 保存到会话历史
     const um=(prompt&&prompt.user?prompt.user:'请根据以下 PRD 文档，生成完整的测试用例：\n\n{prd_text}').replace('{prd_text}',prd);
     session.messages.push({role:'user',content:um});session.messages.push({role:'assistant',content:fullText});
+    if(fullText.trim())lockSessionModel(session,am);
     if(document.getElementById('chatModal').style.display!=='none')rebuildChatHistory();
     // 解析 JSON → 表格 (用户手动停止时跳过)
     if(!aborted){try{
@@ -373,8 +401,8 @@ function stopGenerate(){
 
 // ── 聊天 ──
 function openChat(){
-  const cfg=loadConfig();if(!cfg.apiKey){toast('请先配置 API Key','error');return;}
-  document.getElementById('chatModelLabel').textContent='模型: '+(cfg.model||'deepseek-v4-pro[1M]');
+  const cfg=loadConfig(),am=getActiveModel(),m=cfg[am]||cfg.dp;if(!m.apiKey){toast('请先配置 API Key','error');return;}
+  document.getElementById('chatModelLabel').textContent='模型: '+((MODEL_PRESETS[am]||MODEL_PRESETS.dp).label);
   document.getElementById('chatModal').style.display='';document.getElementById('chatInput').focus();
   rebuildChatHistory();
 }
@@ -399,7 +427,7 @@ function appendChatMsg(role,content,reasoning){
 function toggleChatThink(id){const e=document.getElementById(id),t=e.previousElementSibling;if(e.style.display==='block'){e.style.display='none';t.textContent='💭 查看思考';}else{e.style.display='block';t.textContent='💭 收起思考';}}
 async function sendChat(){
   const input=document.getElementById('chatInput'),msg=input.value.trim();if(!msg)return;
-  const cfg=loadConfig(),ak=cfg.apiKey||'',bu=cfg.baseUrl||'https://api.deepseek.com/anthropic',md=cfg.model||'deepseek-v4-pro[1M]';
+  const cfg=loadConfig(),am=getActiveModel(),m=cfg[am]||cfg.dp,ak=m.apiKey||'',bu=m.baseUrl||'',md=m.model||'';
   if(!ak){toast('请配置 API Key','error');return;}
   input.value='';input.focus();
   const session=getSession();
@@ -412,11 +440,11 @@ async function sendChat(){
   document.getElementById('chatArea').appendChild(typingEl);document.getElementById('chatArea').scrollTop=document.getElementById('chatArea').scrollHeight;
 
   try{
-    const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:ak,base_url:bu,model:md,messages:session.messages})});
+    const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:am,api_key:ak,base_url:bu,model:md,messages:session.messages})});
     const data=await resp.json();typingEl.remove();
     if(!resp.ok){appendChatMsg('ai','❌ '+(data.error||'失败'));return;}
     appendChatMsg('ai',data.content||'(空)',data.reasoning);
-    session.messages.push({role:'assistant',content:data.content||''});saveSessions();
+    session.messages.push({role:'assistant',content:data.content||''});lockSessionModel(session,am);saveSessions();
   }catch(e){typingEl.remove();appendChatMsg('ai','❌ 网络错误: '+e.message);}
   finally{document.getElementById('chatInput').disabled=false;document.getElementById('chatSendBtn').disabled=false;document.getElementById('chatSendBtn').textContent='发送';document.getElementById('chatInput').focus();}
 }
