@@ -189,6 +189,20 @@ function renderSessionTabs(){
 
 // ── 生成（流式） ──
 let currentStreamAbort=null,fullText='',fullThinking='',kbMatchCount=-1,contentBlockType='';
+function showTableLoading(){
+  if(document.getElementById('_tableLoading'))return;
+  const card=document.getElementById('resultCard');
+  card.style.display='flex';
+  const ov=document.createElement('div');
+  ov.id='_tableLoading';
+  ov.style.cssText='position:absolute;inset:0;z-index:10;background:var(--bg);display:flex;align-items:center;justify-content:center;';
+  ov.innerHTML='<div style="background:var(--panel-bg);border:2px solid var(--accent);padding:20px 36px;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--text);"><span class="stream-spinner"></span> 正在生成表格...</div>';
+  card.appendChild(ov);
+}
+function hideTableLoading(){
+  const ov=document.getElementById('_tableLoading');
+  if(ov)ov.remove();
+}
 async function generate(){
   const prd=document.getElementById('prdInput').value.trim();
   const cfg=loadConfig(),am=getActiveModel(),m=cfg[am]||cfg.dp;
@@ -258,24 +272,26 @@ async function generate(){
     if(document.getElementById('chatModal').style.display!=='none')rebuildChatHistory();
     // 解析 JSON → 表格 (用户手动停止时跳过)
     if(!aborted){try{
-      const jsonStr=extractJson(fullText);if(!jsonStr||jsonStr.length<10){block.innerHTML=_renderStreamHTML();saveSessions();toastPersist('AI 未返回有效的 JSON 格式，请重新生成','error');return;}
+      const jsonStr=extractJson(fullText);
+      if(!jsonStr||jsonStr.length<10){hideTableLoading();block.innerHTML=_renderStreamHTML();saveSessions();toastPersist('AI 未返回有效的 JSON 格式，请重新生成','error');return;}
       const data=JSON.parse(jsonStr),tc=data.test_cases||[];
       if(tc.length>0){
-        session.testCases=tc;saveSessions();block.innerHTML+=`<div style="color:var(--accent);font-weight:600;margin-top:8px;">✅ 已生成 ${tc.length} 条测试用例（下方表格）</div>`;
+        session.testCases=tc;saveSessions();
         document.getElementById('resultCard').style.display='flex';renderTable(tc);renderStats(tc,null);
-        // 存入知识库
-        if(getKbSaveEnabled()){
-          if(prd&&prd.length>4&&session.testCases.length)saveToKnowledgeBase(session,prd);
-        }
-      }else{block.innerHTML=_renderStreamHTML();saveSessions();}
-    }catch(e){console.warn('JSON 解析失败 (AI 输出格式异常，已展示原始结果):',e.message);block.innerHTML=_renderStreamHTML()+'<div style="color:var(--danger);margin-top:6px;">⚠️ AI 返回的 JSON 格式有误，请检查上方原始结果或重试</div>';saveSessions();toastPersist('AI 返回的 JSON 格式有误，请重新生成','error');}}
+        hideTableLoading();
+        block.innerHTML=_renderStreamHTML()+'<div style="color:var(--accent);font-weight:600;margin-top:8px;">✅ 已生成 '+tc.length+' 条测试用例（下方表格）</div>';
+        if(getKbSaveEnabled()&&prd&&prd.length>4)saveToKnowledgeBase(session,prd);
+      }else{hideTableLoading();block.innerHTML=_renderStreamHTML();saveSessions();}
+    }catch(e){console.warn('JSON 解析失败:',e.message);hideTableLoading();block.innerHTML=_renderStreamHTML()+'<div style="color:var(--danger);margin-top:6px;">⚠️ AI 返回的 JSON 格式有误，请检查上方原始结果或重试</div>';saveSessions();toastPersist('AI 返回的 JSON 格式有误，请重新生成','error');}}
+    else hideTableLoading();
   }
 }
 
 let _streamRAF=null;
 function updateStream(ev,area,block){
-  if(ev.type==='done'){
-    if(ev.title){const s=getSession();if(s&&!s._autoRenamed&&s.name!==ev.title){s.name=ev.title;s._autoRenamed=true;saveSessions();renderSessionTabs();}}
+  if(ev.type==='done'){showTableLoading();return;}
+  if(ev.type==='session_title'&&ev.title){
+    const s=getSession();if(s&&!s._autoRenamed){s.name=ev.title;s._autoRenamed=true;saveSessions();renderSessionTabs();}
     return;
   }
   if(ev.type==='error'){block.innerHTML='<div style="color:var(--danger)">'+escHtml(ev.message||'流式错误')+'</div>';return;}

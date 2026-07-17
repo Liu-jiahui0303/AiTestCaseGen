@@ -209,14 +209,15 @@ def generate_stream():
             model = (data.get("model") or "").strip()
             for event in client.chat_stream(messages, sp):
                 if event.get("type") == "done":
+                    yield _sse({"type": "done", "title": ""})
                     full_t = "".join(thinking_parts)
-                    title = ""
                     if full_t:
                         try:
                             title = summarize_text(api_key, base_url, model, full_t)
+                            if title:
+                                yield _sse({"type": "session_title", "title": title})
                         except Exception as e:
                             log.warning("Auto title failed: %s", e)
-                    yield _sse({"type": "done", "title": title})
                 else:
                     if event.get("thinking"):
                         thinking_parts.append(event["thinking"])
@@ -352,11 +353,13 @@ def generate_multimodal_stream():
                 if event.get("thinking"):
                     thinking_parts.append(event["thinking"])
                 yield _sse(event)
-            full_t="".join(thinking_parts);title=""
+            yield _sse({"type":"done","title":""})
+            full_t="".join(thinking_parts)
             if full_t:
-                try:title=summarize_text(api_key,base_url,model,full_t)
+                try:
+                    title=summarize_text(api_key,base_url,model,full_t)
+                    if title:yield _sse({"type":"session_title","title":title})
                 except Exception as e:log.warning("Auto title failed: %s",e)
-            yield _sse({"type":"done","title":title})
             log.info("Multimodal stream complete")
         except Exception as e:
             log.error("Multimodal stream error: %s", e)

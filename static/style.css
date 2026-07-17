@@ -303,7 +303,7 @@ select.field-input{
 .add-tab:hover{color:var(--accent);background:var(--btn-hover);}
 
 /* ── Result Area ── */
-.result-area{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;}
+.result-area{position:relative;flex:1;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;}
 .statusbar{
   height:24px;background:var(--panel-header);border-top:2px solid var(--sidebar-border);
   display:flex;align-items:center;padding:0 12px;gap:14px;font-size:10.5px;color:var(--status-text);font-weight:600;
