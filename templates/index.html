@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI 测试用例生成器</title>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
-<link rel="stylesheet" href="/static/style.css?v=1784307000">
+<link rel="stylesheet" href="/static/style.css?v=1784320000">
 </head>
 <body>
 
@@ -146,7 +146,7 @@
 
 <!-- 知识库浏览 -->
 <div class="modal-overlay" id="kbModal" style="display:none;" onclick="if(event.target===this)closeKbModal()">
-  <div class="modal" style="width:700px;"><div class="modal-header"><span>📚 知识库</span><span class="kb-help" title="">?<span class="kb-help-tip">自动积累你生成的测试用例，下次生成相似 PRD 时自动引用参考。<br><br>❕ 仅当 AI 输出标准 JSON 用例格式时才会存入知识库。如果你使用了自定义提示词导致 AI 返回纯文本而非 JSON，则不会自动存入。</span></span><span class="modal-header-spacer"></span><span style="font-size:10px;color:var(--text-dim);" id="kbModalCount">0 条记录</span><button class="btn btn-sm" onclick="openDedupPreview()" title="手动去重" style="margin-right:8px;">🔍 手动去重</button><button class="btn btn-sm btn-danger" onclick="clearKnowledge()" title="清空" style="margin-right:8px;">清空</button><button class="modal-close" onclick="closeKbModal()">✕</button></div>
+  <div class="modal" style="width:1100px;"><div class="modal-header"><span>📚 知识库</span><span class="kb-help" title="">?<span class="kb-help-tip">自动积累你生成的测试用例，下次生成相似 PRD 时自动引用参考。<br><br>❕ 仅当 AI 输出标准 JSON 用例格式时才会存入知识库。如果你使用了自定义提示词导致 AI 返回纯文本而非 JSON，则不会自动存入。</span></span><span class="modal-header-spacer"></span><span style="font-size:10px;color:var(--text-dim);" id="kbModalCount">0 条记录</span><button class="btn btn-sm" onclick="openDedupPreview()" title="手动去重" style="margin-right:8px;">🔍 手动去重</button><button class="btn btn-sm btn-danger" onclick="clearKnowledge()" title="清空" style="margin-right:8px;">清空</button><button class="modal-close" onclick="closeKbModal()">✕</button></div>
     <div class="modal-body" id="kbList" style="max-height:400px;overflow-y:auto;">
       <div style="text-align:center;color:var(--empty-color);padding:30px 0;font-size:12px;">暂无历史记录</div>
     </div>
@@ -192,6 +192,13 @@
 
 <div class="toast-wrap" id="toastWrap"></div>
 
-<script src="/static/app.js?v=1784306000"></script>
+<script src="/static/js/core.js?v=1784310000"></script>
+<script src="/static/js/sessions.js?v=1784310000"></script>
+<script src="/static/js/generation.js?v=1784321000"></script>
+<script src="/static/js/chat.js?v=1784310000"></script>
+<script src="/static/js/results.js?v=1784310000"></script>
+<script src="/static/js/knowledge.js?v=1784317000"></script>
+<script src="/static/js/images.js?v=1784310000"></script>
+<script src="/static/app.js?v=1784310000"></script>
 </body>
 </html>

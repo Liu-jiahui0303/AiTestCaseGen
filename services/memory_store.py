@@ -71,14 +71,73 @@ def _prd_summary(text: str) -> str:
     return text.strip()[:500]
 
 
+def _normalize_prd(text: str) -> str:
+    """用于判断是否为同一份 PRD：忽略大小写和空白差异。"""
+    return re.sub(r"\s+", "", text or "").lower()
+
+
+def _case_key(test_case: dict) -> str:
+    """优先按规范化标题识别同一用例，无标题时按完整内容识别。"""
+    if not isinstance(test_case, dict):
+        return "raw:" + json.dumps(test_case, ensure_ascii=False, sort_keys=True)
+    title = re.sub(r"\s+", "", str(test_case.get("title") or "")).lower()
+    if title:
+        return "title:" + title
+    return "case:" + json.dumps(test_case, ensure_ascii=False, sort_keys=True)
+
+
+def _merge_test_cases(existing: list, incoming: list) -> list:
+    merged = list(existing)
+    existing_keys = {_case_key(test_case) for test_case in merged}
+    for test_case in incoming:
+        key = _case_key(test_case)
+        if key not in existing_keys:
+            merged.append(test_case)
+            existing_keys.add(key)
+    return merged
+
+
 def save(prd_text: str, test_cases: list) -> int:
-    """保存一次生成结果，返回记录 ID"""
-    modules = list({tc.get("module", "未分类") for tc in test_cases})
-    keywords = _extract_keywords(prd_text, modules)
+    """保存生成结果；相同 PRD 自动合并并返回已有记录 ID。"""
     summary = _prd_summary(prd_text)
+    prd_key = _normalize_prd(summary)
 
     with _lock:
         conn = _get_conn()
+        existing_row = None
+        rows = conn.execute(
+            "SELECT id, prd_summary, test_cases_json FROM records"
+            " ORDER BY case_count DESC, id ASC"
+        ).fetchall()
+        for row in rows:
+            if prd_key and _normalize_prd(row["prd_summary"] or "") == prd_key:
+                existing_row = row
+                break
+
+        if existing_row:
+            try:
+                existing_cases = json.loads(existing_row["test_cases_json"] or "[]")
+            except (json.JSONDecodeError, TypeError):
+                existing_cases = []
+            merged_cases = _merge_test_cases(existing_cases, test_cases)
+            modules = list({tc.get("module", "未分类") for tc in merged_cases
+                            if isinstance(tc, dict)})
+            keywords = _extract_keywords(prd_text, modules)
+            conn.execute(
+                "UPDATE records SET prd_summary=?, modules=?, keywords=?,"
+                " test_cases_json=?, case_count=?, created_at=? WHERE id=?",
+                (summary, json.dumps(modules, ensure_ascii=False),
+                 json.dumps(keywords, ensure_ascii=False),
+                 json.dumps(merged_cases, ensure_ascii=False),
+                 len(merged_cases), datetime.now().strftime("%Y-%m-%d %H:%M"),
+                 existing_row["id"]),
+            )
+            conn.commit()
+            return existing_row["id"]
+
+        modules = list({tc.get("module", "未分类") for tc in test_cases
+                        if isinstance(tc, dict)})
+        keywords = _extract_keywords(prd_text, modules)
         cur = conn.execute(
             "INSERT INTO records (prd_summary, modules, keywords, test_cases_json, case_count, created_at)"
             " VALUES (?, ?, ?, ?, ?, ?)",
@@ -97,6 +156,7 @@ def search(prd_text: str, limit: int = 3) -> list[dict]:
     for m in re.findall(r"##\s*(.+?)(?:\n|$)", prd_text):
         modules.append(m.strip())
     keywords = _extract_keywords(prd_text, modules)
+    normalized_prd = _normalize_prd(prd_text)
     if not keywords and not modules:
         return []
 
@@ -107,13 +167,27 @@ def search(prd_text: str, limit: int = 3) -> list[dict]:
             " FROM records ORDER BY created_at DESC"
         ).fetchall()
 
-    # 相似度 = 模块名匹配数 + 关键词重叠数
+    query_modules = {_normalize_prd(module) for module in modules}
+    query_keywords = {_normalize_prd(keyword) for keyword in keywords}
+
+    # 相似度 = 模块名匹配数 + 关键词匹配数
     scored = []
     for r in all_rows:
         rm = set(json.loads(r["modules"])) if r["modules"] else set()
         rk = set(json.loads(r["keywords"])) if r["keywords"] else set()
-        qm = set(modules)
-        score = len(qm & rm) * 3 + len(set(keywords) & rk)
+        matched_modules = {
+            module for module in rm
+            if _normalize_prd(module)
+            and (_normalize_prd(module) in query_modules
+                 or _normalize_prd(module) in normalized_prd)
+        }
+        matched_keywords = {
+            keyword for keyword in rk
+            if _normalize_prd(keyword)
+            and (_normalize_prd(keyword) in query_keywords
+                 or _normalize_prd(keyword) in normalized_prd)
+        }
+        score = len(matched_modules) * 3 + len(matched_keywords)
         if score > 0:
             scored.append((score, dict(r)))
 
@@ -200,7 +274,8 @@ def dedup_preview(overlap_threshold: float = 0.5) -> dict:
     with _lock:
         conn = _get_conn()
         rows = conn.execute(
-            "SELECT id, modules, test_cases_json, case_count FROM records ORDER BY case_count DESC"
+            "SELECT id, prd_summary, modules, test_cases_json, case_count"
+            " FROM records ORDER BY case_count DESC, id ASC"
         ).fetchall()
 
     records = []
@@ -213,85 +288,104 @@ def dedup_preview(overlap_threshold: float = 0.5) -> dict:
             tcs = json.loads(r["test_cases_json"]) if r["test_cases_json"] else []
         except Exception:
             tcs = []
-        titles = {tc.get("title", "").strip() for tc in tcs if tc.get("title", "").strip()}
+        titles = {
+            tc.get("title", "").strip()
+            for tc in tcs
+            if isinstance(tc, dict) and tc.get("title", "").strip()
+        }
         records.append({
             "id": r["id"],
+            "prd_key": _normalize_prd(r["prd_summary"] or ""),
             "modules": [m for m in mods if isinstance(m, str)],
             "module_key": ", ".join(sorted(mods)) if mods else "未分类",
             "case_count": r["case_count"],
             "titles": titles,
         })
 
-    # 按 module_key 分组
-    by_module: dict[str, list] = {}
-    for rec in records:
-        by_module.setdefault(rec["module_key"], []).append(rec)
+    # 构建重复关系：相同 PRD 直接归组；不同 PRD 沿用同模块标题重叠规则。
+    parents = list(range(len(records)))
+
+    def find(index: int) -> int:
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    def union(left: int, right: int) -> None:
+        left_root, right_root = find(left), find(right)
+        if left_root != right_root:
+            parents[right_root] = left_root
+
+    for i in range(len(records)):
+        for j in range(i + 1, len(records)):
+            left, right = records[i], records[j]
+            same_prd = bool(left["prd_key"] and left["prd_key"] == right["prd_key"])
+            if same_prd:
+                union(i, j)
+                continue
+            if left["module_key"] != right["module_key"]:
+                continue
+            left_titles, right_titles = left["titles"], right["titles"]
+            if not left_titles or not right_titles:
+                continue
+            matched_left = set()
+            matched_right = set()
+            for left_title in left_titles:
+                for right_title in right_titles:
+                    if (left_title == right_title or left_title in right_title
+                            or right_title in left_title):
+                        matched_left.add(left_title)
+                        matched_right.add(right_title)
+            overlap = max(len(matched_left), len(matched_right))
+            min_size = min(len(left_titles), len(right_titles))
+            if min_size > 0 and overlap / min_size >= overlap_threshold:
+                union(i, j)
+
+    components: dict[int, list] = {}
+    for index, record in enumerate(records):
+        components.setdefault(find(index), []).append(record)
 
     groups = []
-    for mod_key, recs in by_module.items():
-        if len(recs) < 2:
-            continue  # 只有1条记录，无需去重
-        merged = [False] * len(recs)
-        for i in range(len(recs)):
-            if merged[i]:
-                continue
-            group = [recs[i]]
-            merged[i] = True
-            for j in range(i + 1, len(recs)):
-                if merged[j]:
-                    continue
-                # 计算标题重叠率（包含匹配：A含B 或 B含A 即算重叠）
-                ti = recs[i]["titles"]
-                tj = recs[j]["titles"]
-                if not ti or not tj:
-                    continue
-                # 统计能匹配上的标题对数
-                matched_i = set()
-                matched_j = set()
-                for a in ti:
-                    for b in tj:
-                        if a == b or a in b or b in a:
-                            matched_i.add(a)
-                            matched_j.add(b)
-                overlap = max(len(matched_i), len(matched_j))
-                min_size = min(len(ti), len(tj))
-                if min_size > 0 and overlap / min_size >= overlap_threshold:
-                    group.append(recs[j])
-                    merged[j] = True
-            if len(group) > 1:
-                # 保留用例最多的记录
-                group.sort(key=lambda x: x["case_count"], reverse=True)
-                keep = group[0]
-                merge_list = group[1:]
-                # 合并新标题数
-                all_titles = set(keep["titles"])
-                for m in merge_list:
-                    all_titles |= m["titles"]
-                final_count = len(all_titles)
-                # 保留记录中不被合并来源包含的标题（独有用例）
-                merge_titles = set()
-                for m2 in merge_list:
-                    merge_titles |= m2["titles"]
-                keep_only = sorted({a for a in keep["titles"]
-                                    if not any(a == b or a in b or b in a for b in merge_titles)})
-                # 合并来源中不被保留记录包含的标题（新增用例）
-                new_only = sorted({b for b in merge_titles
-                                   if not any(a == b or a in b or b in a for a in keep["titles"])})
-                groups.append({
-                    "module": mod_key,
-                    "keep_id": keep["id"],
-                    "keep_count": keep["case_count"],
-                    "keep_titles": sorted(keep["titles"])[:8],
-                    "merge_items": [{"id": m["id"], "count": m["case_count"],
-                                     "titles": sorted(m["titles"])[:8],
-                                     "overlap": sorted(
-                                         {a for a in m["titles"] for b in keep["titles"] if a == b or a in b or b in a}
-                                     )[:5]}
-                                    for m in merge_list],
-                    "final_count": final_count,
-                    "keep_only": keep_only[:5],
-                    "new_only": new_only[:5],
-                })
+    for group in components.values():
+        if len(group) < 2:
+            continue
+        # 保留用例最多的记录；数量相同时保留更早的 ID。
+        group.sort(key=lambda item: (-item["case_count"], item["id"]))
+        keep = group[0]
+        merge_list = group[1:]
+        all_titles = set(keep["titles"])
+        for item in merge_list:
+            all_titles |= item["titles"]
+        merge_titles = set()
+        for item in merge_list:
+            merge_titles |= item["titles"]
+        keep_only = sorted({title for title in keep["titles"]
+                            if not any(title == other or title in other or other in title
+                                       for other in merge_titles)})
+        new_only = sorted({title for title in merge_titles
+                           if not any(title == other or title in other or other in title
+                                      for other in keep["titles"])})
+        module_names = sorted({module for item in group for module in item["modules"]})
+        groups.append({
+            "module": ", ".join(module_names) if module_names else "未分类",
+            "keep_id": keep["id"],
+            "keep_count": keep["case_count"],
+            "keep_titles": sorted(keep["titles"])[:8],
+            "merge_items": [{
+                "id": item["id"],
+                "count": item["case_count"],
+                "titles": sorted(item["titles"])[:8],
+                "overlap": sorted({
+                    title
+                    for title in item["titles"]
+                    for keep_title in keep["titles"]
+                    if title == keep_title or title in keep_title or keep_title in title
+                })[:5],
+            } for item in merge_list],
+            "final_count": len(all_titles),
+            "keep_only": keep_only[:5],
+            "new_only": new_only[:5],
+        })
 
     total_delete = sum(len(g["merge_items"]) for g in groups)
     return {"groups": groups, "total_delete": total_delete}
@@ -317,7 +411,7 @@ def dedup_execute(groups: list[dict]) -> dict:
                 keep_tcs = json.loads(row["test_cases_json"]) if row["test_cases_json"] else []
             except Exception:
                 keep_tcs = []
-            existing_titles = {tc.get("title", "").strip() for tc in keep_tcs}
+            existing_keys = {_case_key(test_case) for test_case in keep_tcs}
 
             # 合并待删除记录中的新用例
             for mi in g["merge_items"]:
@@ -332,10 +426,10 @@ def dedup_execute(groups: list[dict]) -> dict:
                 except Exception:
                     mtcs = []
                 for tc in mtcs:
-                    title = (tc.get("title") or "").strip()
-                    if title and title not in existing_titles:
+                    key = _case_key(tc)
+                    if key not in existing_keys:
                         keep_tcs.append(tc)
-                        existing_titles.add(title)
+                        existing_keys.add(key)
 
             # 更新保留记录
             modules = list({tc.get("module", "未分类") for tc in keep_tcs})
